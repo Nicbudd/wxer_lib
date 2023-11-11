@@ -25,6 +25,10 @@ impl Temperature {
         (self.0 * 9./5.) + 32.
     }
 
+    pub fn fahrenheit(&self) -> f32 {
+        self.0
+    }
+
     pub fn from_celsius<T: Into<f32>>(c: T) -> Temperature {
         let c: f32 = c.into();
         Temperature{0: (c - 32.0) * 5./9.}
