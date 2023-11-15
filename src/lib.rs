@@ -195,6 +195,12 @@ impl fmt::Display for SkyCoverage {
     }
 }
 
+pub struct Station {
+    name: String,
+    altitude: f32,
+    coords: (f32, f32),
+}
+
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Precip {
@@ -209,7 +215,7 @@ pub struct StationEntry {
     pub indoor_temperature: Option<f32>,
     pub temperature_2m: Option<f32>,
     pub dewpoint_2m: Option<f32>,
-    pub sea_level_pressure: Option<f32>,
+    sea_level_pressure: Option<f32>,
     pub wind_10m: Option<Wind>, 
     pub skycover: Option<SkyCoverage>, 
     pub visibility: Option<f32>,
@@ -247,6 +253,48 @@ impl StationEntry {
             Some(top_term / bottom_term * 100.)
         } else {
             None
+        }
+    }
+
+    pub fn sea_level_pressure(&self, station: Station) -> Option<f32> {
+        if self.sea_level_pressure.is_some() {
+            self.sea_level_pressure
+        } else {
+            if let (Some(p), Some(t)) = (self.raw_pressure, self.temperature_2m) {
+                // http://www.wind101.net/sea-level-pressure-advanced/sea-level-pressure-advanced.html
+                let h = station.altitude;
+                let latitude = station.coords.0;
+                let b = 1013.25; //(average baro pressure of a column)
+                let k_upper =  18400.; // meters apparently
+                let alpha = 0.0037; // coefficient of thermal expansion of air
+                let k_lower = 0.0026; // based on figure of earth
+                let r = 6367324.; // radius of earth
+                
+                let lapse_rate = if h < 100. {
+                    0. // assume the boundary layer is about 100 meters
+                } else {
+                    0.05
+                };
+
+                let column_temp = t + (lapse_rate*h)/2.; // take the average of the temperature
+                let e = 10f32.powf(7.5*column_temp / (237.3+column_temp)) * 6.1078;
+
+                let term1 = 1. + (alpha * column_temp); // correction for column temp
+                let term2 = 1. / (1. - (0.378 * (e/b))); // correction for humidity
+                let term3 = 1. / (1. - (k_lower * (2.*latitude).cos())); // correction for obliquity of earth
+                let term4 = 1. + (h/r); // correction for gravity
+
+                let correction = h / (k_upper*term1*term2*term3*term4);
+
+                let mslp = p * 10f32.powf(10f32.log10() - correction);
+
+                Some(mslp)
+
+            } else {
+                None
+            }
+
+
         }
     }
 
