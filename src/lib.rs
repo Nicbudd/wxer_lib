@@ -257,14 +257,6 @@ impl StationEntry {
     }
 
     pub fn slp(&self, station: &Station) -> Option<f32> {
-        if self.sea_level_pressure.is_some() {
-            self.sea_level_pressure
-        } else {
-            self.calc_sea_level_pressure(station)
-        }
-    }
-
-    pub fn calc_sea_level_pressure(&self, station: &Station) -> Option<f32> {
         if let (Some(p), Some(t)) = (self.raw_pressure, self.temperature_2m) {
             // http://www.wind101.net/sea-level-pressure-advanced/sea-level-pressure-advanced.html
             let h = station.altitude;
@@ -296,7 +288,7 @@ impl StationEntry {
             Some(mslp)
 
         } else {
-            None
+            self.sea_level_pressure
         }
     }
 
