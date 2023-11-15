@@ -122,7 +122,7 @@ impl Display for Wind {
 }
 
 
-#[derive(Serialize, Deserialize, Clone, Copy, Display)]
+#[derive(Serialize, Deserialize, Clone, Copy, Display, PartialEq)]
 pub enum CloudLayerCoverage {
     #[display(fmt = "FEW")]
     Few,
@@ -257,6 +257,9 @@ impl StationEntry {
 impl fmt::Debug for StationEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut parameters: Vec<String> = vec![];
+
+        parameters.push(format!("{}", self.date_time.format("%c"))); 
+        
 
         if let Some(x) = self.indoor_temperature {
             parameters.push(format!("Inside Temp: {:3.1}", x)); 
