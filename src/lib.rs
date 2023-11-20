@@ -117,7 +117,7 @@ pub struct Wind {
 
 impl Display for Wind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}° @ {} kts", self.direction.degrees(), self.speed)
+        write!(f, "{}°@{} kts", self.direction.degrees(), self.speed)
     }
 }
 
@@ -173,7 +173,7 @@ impl CloudLayer {
 
 impl fmt::Display for CloudLayer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} @ {} ft", self.coverage.to_string(), self.height)
+        write!(f, "{}@{} ft", self.coverage.to_string(), self.height)
     }
 }
 
