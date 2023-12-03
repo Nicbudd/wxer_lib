@@ -37,15 +37,15 @@ pub struct Direction(u16);
 
 impl Direction {
     fn sanitize_degrees(degrees: u16) -> Result<u16> {
-        if degrees > 360 {
+        let degrees = if degrees > 360 {
             bail!("Degrees provided ({degrees}) were not under 360.");
         } else if degrees % 10 != 0 {
-            Ok(((degrees + 5) / 10) * 10) // round to nearest 10
-        } else if degrees == 360 {
-            Ok(0)
+            ((degrees + 5) / 10) * 10 // round to nearest 10
         } else {
-            Ok(degrees)
-        }
+            degrees
+        };
+
+        Ok(degrees % 360)
     }
 
     pub fn from_degrees(degrees: u16) -> Result<Direction> {
@@ -91,7 +91,7 @@ impl Direction {
             330 => "NNW",
             340 => "NNW",
             350 => "N",
-            _ => panic!("Direction struct contained {}, which is invalid.", self.0)
+            _ => unreachable!("Direction struct contained {}, which is invalid.", self.0)
         }
     }
 
