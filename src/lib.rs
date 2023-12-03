@@ -75,7 +75,7 @@ impl Direction {
         if degrees > 360 {
             bail!("Degrees provided ({degrees}) were not under 360.");
         } else if degrees % 10 != 0 {
-            bail!("Degrees provided ({degrees}) were not divisible by 10.");
+            Ok(((degrees + 5) / 10) * 10) // round to nearest 10
         } else if degrees == 360 {
             Ok(0)
         } else {
