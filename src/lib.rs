@@ -100,13 +100,13 @@ impl Direction {
     } 
 }
 
-// pub fn mph(&self) -> f32 {
-//     self.0/0.868976
-// }
+pub fn kts_to_mph(f: f32) -> f32 {
+    f/0.868976
+}
 
-// pub fn kph(&self) -> f32 {
-//     self.0/0.539957
-// }
+pub fn kts_to_kph(f: f32) -> f32 {
+    f/0.539957
+}
 
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -292,6 +292,93 @@ impl StationEntry {
         }
     }
 
+
+    // None - Incomplete Data
+    // Some(true) - wind chill is within valid temp & wind range
+    // Some(false) - wind chill is outside valid temp and wind range
+    pub fn wind_chill_valid(&self) -> Option<bool> {
+        if let Some(t) = self.temperature_2m {
+            if t < 50. {
+                if let Some(w) = self.wind_10m {
+                    Some(kts_to_mph(w.speed) > 3.)
+                } else {
+                    None
+                }
+            } else {
+                Some(false)
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn wind_chill(&self) -> Option<f32> {
+        if let (Some(w), Some(t)) = (self.wind_10m, self.temperature_2m) {
+            let mph = kts_to_mph(w.speed);
+
+            if self.wind_chill_valid() == Some(true) {
+                let v_016 = mph.powf(0.16);
+                Some(35.74 + 0.6215*t - 35.75*v_016 + 0.4275*t*v_016)
+            } else {
+                None
+            }
+
+        } else {
+            None
+        }
+    }
+
+
+    // None - Incomplete Data
+    // Some(true) - heat index is within valid temp & humidity range
+    // Some(false) - heat index is outside valid temp & humidity range
+    pub fn heat_index_valid(&self) -> Option<bool> {
+        if let Some(t) = self.temperature_2m {
+            if t > 80. {
+                if let Some(rh) = self.relative_humidity_2m() {
+                    Some(rh > 40.)
+                } else {
+                    None
+                }
+            } else {
+                Some(false)
+            }
+        } else {
+            None
+        }
+    }
+
+    // from Wikipedia: https://en.wikipedia.org/wiki/Heat_index
+    pub fn heat_index(&self) -> Option<f32> {
+        if let (Some(t), Some(rh)) = (self.temperature_2m, self.relative_humidity_2m()) {
+            if self.heat_index_valid() == Some(true) {
+                const C: [f32; 10] = [0.0, -42.379, 2.04901523, 10.14333127, -0.22475541, -0.00683783, -0.05481717, 0.00122874, 0.00085282, -0.00000199];
+                Some((C[1]) + (C[2]*t) + (C[3]*rh) + (C[4]*t*rh) + (C[5]*t*t) + (C[6]*rh*rh) + (C[7]*t*t*rh) + (C[8]*t*rh*rh) + (C[9]*t*t*rh*rh))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn apparent_temp(&self) -> Option<f32> {
+
+        // dbg!(self.heat_index_valid(), self.wind_chill_valid());
+
+        if let Some(_) = self.temperature_2m {
+            match (self.heat_index_valid(), self.wind_chill_valid()) {
+                (Some(true), _) => self.heat_index(), // if the heat index is valid, use it
+                (_, Some(true)) => self.wind_chill(), // if the wind chill is valid, use it
+                (None, _) | (_, None) => None, // if neither are valid and we're missing data, then we can't provide a valid index
+                (Some(false), Some(false)) => self.temperature_2m, // if we're outside the range of both, then we can just use temp_2m
+            }
+
+        } else {
+            None
+        }
+    }
+
 }
 
 
@@ -353,9 +440,93 @@ impl fmt::Debug for StationEntry {
             }
         }
 
-
         let full_string = parameters.join(", ");
 
         write!(f, "{}", full_string)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{StationEntry, Wind};
+
+    fn float_within_one_decimal(val: f32, cmp: f32) -> bool {
+        if val < (cmp + 0.1) && val > (cmp - 0.1) {
+            true
+        } else {
+            println!("{val}");
+            false
+        }
+    }
+
+    #[test]
+    fn test_apparent_temp() {
+        let mut e = StationEntry::empty();
+
+        e.temperature_2m = Some(51.);
+        assert_eq!(e.apparent_temp(), Some(51.));
+
+        e.temperature_2m = Some(49.);
+        assert_eq!(e.apparent_temp(), None);
+
+        e.wind_10m = Some(Wind {speed: 2., direction: crate::Direction::from_degrees(0).unwrap()});
+        assert_eq!(e.apparent_temp(), Some(49.));
+
+        e.temperature_2m = Some(79.);
+        assert_eq!(e.apparent_temp(), Some(79.));
+
+        e.temperature_2m = Some(81.);
+        assert_eq!(e.apparent_temp(), None);
+
+        e.dewpoint_2m = Some(54.);
+        assert_eq!(e.apparent_temp(), Some(81.));
+
+
+        // heat index tests
+
+        e.temperature_2m = Some(81.);
+        e.dewpoint_2m = Some(65.);
+        let apparent_temp = e.apparent_temp().unwrap_or(0.0);
+        assert!(float_within_one_decimal(apparent_temp, 82.8));
+
+
+        e.temperature_2m = Some(100.);
+        e.dewpoint_2m = Some(75.);
+        let apparent_temp = e.apparent_temp().unwrap_or(0.0);
+        assert!(float_within_one_decimal(apparent_temp, 113.7));
+
+        e.temperature_2m = Some(110.);
+        e.dewpoint_2m = Some(85.);
+        let apparent_temp = e.apparent_temp().unwrap_or(0.0);
+        assert!(float_within_one_decimal(apparent_temp, 146.1));
+
+
+        // wind chill tests
+
+        e.temperature_2m = Some(32.);
+        e.wind_10m = Some(Wind {speed: 10., direction: crate::Direction::from_degrees(0).unwrap()});
+        let apparent_temp = e.apparent_temp().unwrap_or(0.0);
+        assert!(float_within_one_decimal(apparent_temp, 23.0));
+
+        e.temperature_2m = Some(49.);
+        e.wind_10m = Some(Wind {speed: 3., direction: crate::Direction::from_degrees(0).unwrap()});
+        let apparent_temp = e.apparent_temp().unwrap_or(0.0);
+        assert!(float_within_one_decimal(apparent_temp, 48.1));
+
+        e.temperature_2m = Some(49.);
+        e.wind_10m = Some(Wind {speed: 40., direction: crate::Direction::from_degrees(0).unwrap()});
+        let apparent_temp = e.apparent_temp().unwrap_or(0.0);
+        assert!(float_within_one_decimal(apparent_temp, 38.9));
+
+        e.temperature_2m = Some(-20.);
+        e.wind_10m = Some(Wind {speed: 3., direction: crate::Direction::from_degrees(0).unwrap()});
+        let apparent_temp = e.apparent_temp().unwrap_or(0.0);
+        assert!(float_within_one_decimal(apparent_temp, -30.7));
+
+        e.temperature_2m = Some(-20.);
+        e.wind_10m = Some(Wind {speed: 40., direction: crate::Direction::from_degrees(0).unwrap()});
+        let apparent_temp = e.apparent_temp().unwrap_or(0.0);
+        assert!(float_within_one_decimal(apparent_temp, -58.4));
+
     }
 }
