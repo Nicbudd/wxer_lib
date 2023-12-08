@@ -1,4 +1,4 @@
-use std::fmt::{Display, self};
+use std::{fmt::{Display, self}, collections::BTreeMap};
 
 use anyhow::{Result, bail};
 
@@ -15,7 +15,6 @@ pub fn ignore_none<T, R, F: FnMut(T) -> R>(a: Option<T>, mut f: F) -> Option<R> 
         }
     }
 } 
-
 
 pub fn c_to_f<T: Into<f32>>(f: T) -> f32 {
     let f = f.into();
@@ -436,10 +435,10 @@ pub struct WxEntry {
 
 impl WxEntry {
 
-    pub fn empty(station: Station) -> WxEntry {
+    pub fn empty(station: &Station) -> WxEntry {
         WxEntry {
             date_time: DateTime::default(),
-            station,
+            station: station.clone(),
 
             sea_level: WxEntryHeight::empty(MSL(0.0)),
             indoor: WxEntryHeight::empty(Indoor),
@@ -479,6 +478,8 @@ impl WxEntry {
         if let Some(p) = self.indoor.slp(self.latitude()) {
             Some(p)
         } else if let Some(p) = self.near_surface.slp(self.latitude()) {
+            Some(p)
+        } else if let Some(p) = self.sea_level.pressure {
             Some(p)
         } else {
             None
@@ -603,6 +604,8 @@ impl fmt::Debug for WxEntry {
     }
 }
 
+pub type StationDatabase = BTreeMap<DateTime<Utc>, WxEntry>;
+
 #[cfg(test)]
 mod tests {
     use crate::{WxEntryHeight, Level::AGL};
@@ -687,3 +690,4 @@ mod tests {
 
     }
 }
+
