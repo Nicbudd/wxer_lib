@@ -424,7 +424,7 @@ pub struct WxEntry {
     pub _250mb: WxEntryHeight,
 
     pub cape: Option<f32>,
-    pub skycover: Option<f32>,
+    pub skycover: Option<SkyCoverage>,
     pub present_wx: Option<Vec<String>>,
     pub raw_metar: Option<String>,
     pub precip_today: Option<f32>,
