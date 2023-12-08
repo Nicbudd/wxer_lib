@@ -216,8 +216,9 @@ impl Display for Precip {
     }
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Level {
+    Indoor,
     AGL(f64),
     MSL(f64),
     MBAR(f64),
@@ -228,6 +229,7 @@ use Level::*;
 impl Display for Level {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Indoor => write!(f, "Indoor"),
             AGL(h) => write!(f, "{h} ft AGL"),
             MSL(h) => write!(f, "{h} ft MSL"),
             MBAR(h) => write!(f, "{h} mb"),
@@ -440,7 +442,7 @@ impl WxEntry {
             station,
 
             sea_level: WxEntryHeight::empty(MSL(0.0)),
-            indoor: WxEntryHeight::empty(AGL(0.0)),
+            indoor: WxEntryHeight::empty(Indoor),
             near_surface: WxEntryHeight::empty(AGL(0.0)),
             _500mb: WxEntryHeight::empty(MBAR(500.)),
             _250mb: WxEntryHeight::empty(MBAR(250.)),
@@ -456,6 +458,32 @@ impl WxEntry {
         }
     } 
 
+
+    pub fn heights_vec(&self) -> Vec<WxEntryHeight> {
+        let mut vec = vec![];
+
+        vec.push(self.sea_level);
+        vec.push(self.indoor);
+        vec.push(self.near_surface);
+        vec.push(self._500mb);
+        vec.push(self._250mb);
+
+        vec
+    }
+
+    pub fn latitude(&self) -> f32 {
+        return self.station.coords.0;
+    }
+
+    pub fn best_slp(&self) -> Option<f32> {
+        if let Some(p) = self.indoor.slp(self.latitude()) {
+            Some(p)
+        } else if let Some(p) = self.near_surface.slp(self.latitude()) {
+            Some(p)
+        } else {
+            None
+        }
+    }
 }
 
 
