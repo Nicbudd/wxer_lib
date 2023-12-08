@@ -263,6 +263,18 @@ impl WxEntryHeight {
         }
     }
 
+    pub fn wind(&self) -> Option<Wind> {
+
+        if let (Some(direction), Some(speed)) = (self.wind_direction, self.wind_speed) {
+            Some(Wind {
+                direction,
+                speed
+            })
+        } else {
+            None
+        } 
+    }
+
     pub fn relative_humidity_2m(&self) -> Option<f32> { // in percentage
         if let (Some(temp_f), Some(dewp_f)) = (self.temperature, self.dewpoint) {
             let t = f_to_c(temp_f);
