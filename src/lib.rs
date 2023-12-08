@@ -428,7 +428,7 @@ pub struct WxEntry {
     pub skycover: Option<SkyCoverage>,
     pub present_wx: Option<Vec<String>>,
     pub raw_metar: Option<String>,
-    pub precip_today: Option<f32>,
+    pub precip_today: Option<Precip>,
     pub precip: Option<Precip>,
     pub precip_probability: Option<f32>,
 }
