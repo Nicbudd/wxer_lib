@@ -551,7 +551,7 @@ impl fmt::Debug for WxEntry {
         }
 
         if let Some(s) = &self.precip_probability {
-            parameters.push(s.to_string())
+            parameters.push(format!("Precip Prob: {}", s.to_string()))
         }
 
         if let Some(s) = &self.precip_today {
