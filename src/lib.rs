@@ -242,7 +242,7 @@ impl Display for Layer {
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct WxEntryLayer {
-    pub level: Layer,
+    pub layer: Layer,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height_agl: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -262,9 +262,9 @@ pub struct WxEntryLayer {
 }
 
 impl WxEntryLayer {
-    pub fn empty(level: Layer) -> WxEntryLayer {
+    pub fn empty(layer: Layer) -> WxEntryLayer {
         WxEntryLayer {
-            level,
+            layer,
             height_agl: None,
             height_msl: None,
             temperature: None,
@@ -493,7 +493,7 @@ impl fmt::Display for WxEntryLayer {
 
         // parameters.push(format!("{}", self.date_time.format("%c"))); 
 
-        parameters.push(format!("Level: {}", self.level)); 
+        parameters.push(format!("Level: {}", self.layer)); 
 
         if let Some(x) = self.height_agl {
             parameters.push(format!("Height AGL: {:.0}", x));
