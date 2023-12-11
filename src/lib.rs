@@ -315,7 +315,7 @@ impl WxEntryLayer {
                 0.05
             };
 
-            let column_temp = t + (lapse_rate*h)/2.; // take the average of the temperature
+            let column_temp = f_to_c(t) + (lapse_rate*h)/2.; // take the average of the temperature
             let e = 10f32.powf(7.5*column_temp / (237.3+column_temp)) * 6.1078;
 
             let term1 = 1. + (alpha * column_temp); // correction for column temp
