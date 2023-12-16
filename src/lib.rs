@@ -309,13 +309,10 @@ impl WxEntryLayer {
             let k_lower = 0.0026; // based on figure of earth
             let r = 6367324.; // radius of earth
             
-            let lapse_rate = if h < 100. {
-                0. // assume the boundary layer is about 100 meters
-            } else {
-                0.05
-            };
+            let lapse_rate = 0.05;
 
             let column_temp = f_to_c(t) + (lapse_rate*h)/2.; // take the average of the temperature
+            dbg!(&column_temp);
             let e = 10f32.powf(7.5*column_temp / (237.3+column_temp)) * 6.1078;
 
             let term1 = 1. + (alpha * column_temp); // correction for column temp
@@ -325,7 +322,7 @@ impl WxEntryLayer {
 
             let correction = h / (k_upper*term1*term2*term3*term4);
 
-            let mslp = p * 10f32.powf(10f32.log10() - correction);
+            let mslp = 10f32.powf(p.log10() - correction);
 
             Some(mslp)
 
