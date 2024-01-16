@@ -322,7 +322,7 @@ impl WxEntryLayer {
 
             let correction = h / (k_upper*term1*term2*term3*term4);
 
-            let mslp = 10f32.powf(p.log10() - correction);
+            let mslp = 10f32.powf(p.log10() + correction);
 
             Some(mslp)
 
@@ -470,6 +470,7 @@ impl WxEntry {
     }
 
     pub fn best_slp(&self) -> Option<f32> {
+        dbg!(&self);
         if let Some(Some(p)) = self.layers.get(&SeaLevel).map(|x| x.pressure) {
             Some(p)
         } else if let Some(Some(p)) = self.layers.get(&Indoor).map(|x| x.slp(self.latitude())) {
