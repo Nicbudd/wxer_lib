@@ -480,6 +480,19 @@ impl WxEntry {
             None
         }
     }
+
+
+    pub fn sealevel(&self) -> Option<&WxEntryLayer> {
+        self.layers.get(&SeaLevel)
+    }
+
+    pub fn surface(&self) -> Option<&WxEntryLayer> {
+        self.layers.get(&NearSurface)
+    }
+
+    pub fn indoor(&self) -> Option<&WxEntryLayer> {
+        self.layers.get(&Indoor)
+    }
 }
 
 
