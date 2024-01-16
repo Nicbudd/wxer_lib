@@ -195,6 +195,7 @@ impl fmt::Display for SkyCoverage {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Station {
     pub name: String,
     pub altitude: f32,
