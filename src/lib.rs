@@ -1,4 +1,4 @@
-use std::{fmt::{Display, self}, collections::{BTreeMap, HashMap}};
+use std::{fmt::{Display, self}, collections::{BTreeMap, HashMap}, f32::consts::PI};
 
 use anyhow::{Result, bail};
 
@@ -303,26 +303,33 @@ impl WxEntryLayer {
     pub fn slp(&self, latitude: f32) -> Option<f32> {
         if let (Some(p), Some(t), Some(h)) = (self.pressure, self.temperature, self.height_msl) {
             // http://www.wind101.net/sea-level-pressure-advanced/sea-level-pressure-advanced.html
+            let phi =  latitude * PI / 180.0;
             let b = 1013.25; //(average baro pressure of a column)
             let k_upper =  18400.; // meters apparently
             let alpha = 0.0037; // coefficient of thermal expansion of air
             let k_lower = 0.0026; // based on figure of earth
             let r = 6367324.; // radius of earth
             
-            let lapse_rate = 0.05;
+            let lapse_rate = 0.005; // 0.5C/100m
 
             let column_temp = f_to_c(t) + (lapse_rate*h)/2.; // take the average of the temperature
-            dbg!(&column_temp);
+            // dbg!(&column_temp);
             let e = 10f32.powf(7.5*column_temp / (237.3+column_temp)) * 6.1078;
+            // dbg!(&e);
 
             let term1 = 1. + (alpha * column_temp); // correction for column temp
+            // dbg!(&term1);
             let term2 = 1. / (1. - (0.378 * (e/b))); // correction for humidity
-            let term3 = 1. / (1. - (k_lower * (2.*latitude).cos())); // correction for obliquity of earth
+            // dbg!(&term2);
+            let term3 = 1. / (1. - (k_lower * (2.*phi).cos())); // correction for obliquity of earth
+            // dbg!(&term3);
             let term4 = 1. + (h/r); // correction for gravity
+            // dbg!(&term4);
 
             let correction = h / (k_upper*term1*term2*term3*term4);
+            // dbg!(&h);
 
-            let mslp = 10f32.powf(p.log10() - correction);
+            let mslp = 10f32.powf(p.log10() + correction);
 
             Some(mslp)
 
