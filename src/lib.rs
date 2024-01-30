@@ -31,6 +31,28 @@ pub fn f_to_c<T: Into<f32>>(c: T) -> f32 {
 //     self.0*0.02952998057228486
 // }
 
+pub fn distance_between_coords(lat1: f32, long1: f32, lat2: f32, long2: f32) -> f32 {
+
+    // Haversine formula
+    // assuming symmetrical earth
+    let earth_radius = 3956.5; // miles, approx
+    let phi_1 = lat1 * PI / 180.;
+    let phi_2 = lat2 * PI / 180.;
+    let delta_phi = (lat2-lat1) * PI / 180.;
+    let delta_lmbda = (long2-long1) * PI / 180.;
+
+    let a = (delta_phi/2.).sin() * (delta_phi/2.).sin() + 
+    phi_1.cos() * phi_2.cos() * 
+    (delta_lmbda / 2.).sin() * (delta_lmbda / 2.).sin();
+
+    let c = 2. * (a.sqrt()).atan2((1.-a).sqrt());
+
+    let d = earth_radius  * c;
+
+    d
+} 
+
+
 #[derive(Clone, Copy, Serialize, Deserialize, Display)]
 pub struct Direction(u16); 
 
