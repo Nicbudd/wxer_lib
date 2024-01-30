@@ -31,11 +31,11 @@ pub fn f_to_c<T: Into<f32>>(c: T) -> f32 {
 //     self.0*0.02952998057228486
 // }
 
-pub fn distance_between_coords(lat1: f32, long1: f32, lat2: f32, long2: f32) -> f32 {
+pub fn distance_between_coords_km(lat1: f32, long1: f32, lat2: f32, long2: f32) -> f32 {
 
     // Haversine formula
     // assuming symmetrical earth
-    let earth_radius = 3956.5; // miles, approx
+    let earth_radius = 6371.0; // km, approx
     let phi_1 = lat1 * PI / 180.;
     let phi_2 = lat2 * PI / 180.;
     let delta_phi = (lat2-lat1) * PI / 180.;
