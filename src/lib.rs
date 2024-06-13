@@ -1,4 +1,6 @@
-use std::{fmt::{Display, self}, collections::{BTreeMap, HashMap}, f32::consts::PI};
+use std::f32::consts::PI;
+use std::fmt::{Display, self};
+use std::collections::HashMap;
 
 use anyhow::{Result, bail};
 
@@ -6,215 +8,18 @@ use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use derive_more::Display;
 
-pub fn ignore_none<T, R, F: FnMut(T) -> R>(a: Option<T>, mut f: F) -> Option<R> {
-    match a {
-        None => None,
-        Some(s) => {
-            let r = f(s); 
-            Some(r)
-        }
-    }
-} 
+mod fetch;
+pub use fetch::*;
 
-pub fn c_to_f<T: Into<f32>>(f: T) -> f32 {
-    let f = f.into();
-    (f * 9./5.) + 32.
-}
+mod formulae;
+pub use formulae::*;
 
-pub fn f_to_c<T: Into<f32>>(c: T) -> f32 {
-    let c: f32 = c.into();
-    (c - 32.0) * 5./9.
-}
+mod db;
+pub use db::*;
 
-// #[allow(non_snake_case)]
-// pub fn inHg(&self) -> f32 {
-//     self.0*0.02952998057228486
-// }
-
-pub fn distance_between_coords_km(lat1: f32, long1: f32, lat2: f32, long2: f32) -> f32 {
-
-    // Haversine formula
-    // assuming symmetrical earth
-    let earth_radius = 6371.0; // km, approx
-    let phi_1 = lat1 * PI / 180.;
-    let phi_2 = lat2 * PI / 180.;
-    let delta_phi = (lat2-lat1) * PI / 180.;
-    let delta_lmbda = (long2-long1) * PI / 180.;
-
-    let a = (delta_phi/2.).sin() * (delta_phi/2.).sin() + 
-    phi_1.cos() * phi_2.cos() * 
-    (delta_lmbda / 2.).sin() * (delta_lmbda / 2.).sin();
-
-    let c = 2. * (a.sqrt()).atan2((1.-a).sqrt());
-
-    let d = earth_radius  * c;
-
-    d
-} 
+// STRUCTS ---------------------------------------------------------------------
 
 
-#[derive(Clone, Copy, Serialize, Deserialize, Display)]
-pub struct Direction(u16); 
-
-impl Direction {
-    fn sanitize_degrees(degrees: u16) -> Result<u16> {
-        let degrees = if degrees > 360 {
-            bail!("Degrees provided ({degrees}) were not under 360.");
-        } else if degrees % 10 != 0 {
-            ((degrees + 5) / 10) * 10 // round to nearest 10
-        } else {
-            degrees
-        };
-
-        Ok(degrees % 360)
-    }
-
-    pub fn from_degrees(degrees: u16) -> Result<Direction> {
-        let corrected_degrees = Direction::sanitize_degrees(degrees)?;
-        Ok(Direction(corrected_degrees))
-    }
-
-    pub fn cardinal(&self) -> &'static str {
-        match self.0 {
-            0 => "N",
-            10 => "N",
-            20 => "NNE",
-            30 => "NNE",
-            40 => "NE",
-            50 => "NE",
-            60 => "ENE",
-            70 => "ENE",
-            80 => "E",
-            90 => "E",
-            100 => "E",
-            110 => "ESE",
-            120 => "ESE",
-            130 => "SE",
-            140 => "SE",
-            150 => "SSE",
-            160 => "SSE",
-            170 => "S",
-            180 => "S",
-            190 => "S",
-            200 => "SSW",
-            210 => "SSW",
-            220 => "SW",
-            230 => "SW",
-            240 => "WSW",
-            250 => "WSW",
-            260 => "W",
-            270 => "W",
-            280 => "W",
-            290 => "WNW",
-            300 => "WNW",
-            310 => "NW",
-            320 => "NW",
-            330 => "NNW",
-            340 => "NNW",
-            350 => "N",
-            _ => unreachable!("Direction struct contained {}, which is invalid.", self.0)
-        }
-    }
-
-    pub fn degrees(&self) -> u16 {
-        self.0
-    } 
-}
-
-pub fn kts_to_mph(f: f32) -> f32 {
-    f/0.868976
-}
-
-pub fn kts_to_kph(f: f32) -> f32 {
-    f/0.539957
-}
-
-
-#[derive(Clone, Copy, Serialize, Deserialize)]
-pub struct Wind {
-    pub direction: Direction, // stored as degrees
-    pub speed: f32,
-}
-
-impl Display for Wind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}°@{} kts", self.direction.degrees(), self.speed)
-    }
-}
-
-
-#[derive(Serialize, Deserialize, Clone, Copy, Display, PartialEq)]
-pub enum CloudLayerCoverage {
-    #[display(fmt = "FEW")]
-    Few,
-    #[display(fmt = "SCT")]
-    Scattered,
-    #[display(fmt = "BKN")]
-    Broken,
-    #[display(fmt = "OVC")]
-    Overcast
-}
-
-impl CloudLayerCoverage {
-    pub fn str(&self) -> &'static str {
-        match self {
-            Self::Few => "FEW",
-            Self::Scattered => "SCT",
-            Self::Broken => "BKN",
-            Self::Overcast => "OVC",
-        } 
-    }
-}
-
-
-#[derive(Serialize, Deserialize, Clone, Copy)]
-pub struct CloudLayer {
-    pub coverage: CloudLayerCoverage,
-    pub height: u32, // given in feet
-}
-
-impl CloudLayer {   
-    pub fn from_code(code: &str, height: u32) -> Result<Option<CloudLayer>> {
-        let coverage_opt = match code {
-            "SKC" => None,
-            "CLR" => None,
-            "FEW" => Some(CloudLayerCoverage::Few),
-            "SCT" => Some(CloudLayerCoverage::Scattered),
-            "BKN" => Some(CloudLayerCoverage::Broken),
-            "OVC" => Some(CloudLayerCoverage::Overcast),
-            _ => bail!("Unknown cloud cover string '{code}'"),
-        };
-
-        match coverage_opt {
-            Some(coverage) => Ok(Some(CloudLayer {coverage, height})),
-            None => Ok(None),
-        }
-    }
-}
-
-impl fmt::Display for CloudLayer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}@{} ft", self.coverage.to_string(), self.height)
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(untagged)]
-pub enum SkyCoverage {
-    Clear,
-    Cloudy(Vec<CloudLayer>),
-}
-
-impl fmt::Display for SkyCoverage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Clear => write!(f, "CLR"),
-            Self::Cloudy(v) => {
-                write!(f, "{}", v.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", "))
-            }
-        }
-    }
-}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Station {
@@ -224,43 +29,145 @@ pub struct Station {
 }
 
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
-pub struct Precip {
-    pub unknown: f32,
-    pub rain: f32,
-    pub snow: f32,
+
+// WXENTRY
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct WxEntry {
+    pub date_time: DateTime<Utc>,
+    pub station: Station,
+    
+    pub layers: HashMap<Layer, WxEntryLayer>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cape: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skycover: Option<SkyCoverage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub present_wx: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_metar: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub precip_today: Option<Precip>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub precip: Option<Precip>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub precip_probability: Option<f32>,
 }
 
-impl Display for Precip {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Rain: {}, Snow: {}, Unknown: {}", self.rain, self.snow, self.unknown)
+impl WxEntry {
+
+    pub fn empty(station: &Station) -> WxEntry {
+        WxEntry {
+            date_time: DateTime::default(),
+            station: station.clone(),
+
+            layers: HashMap::new(),
+            
+            cape: None,
+            skycover: None,
+            precip_today: None,
+            precip: None,
+            precip_probability: None,
+            present_wx: None,
+            raw_metar: None,
+
+        }
+    } 
+
+    pub fn latitude(&self) -> f32 {
+        return self.station.coords.0;
     }
-}
 
-#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum Layer {
-    Indoor,
-    NearSurface,
-    SeaLevel,
-    AGL(u64),
-    MSL(u64),
-    MBAR(u64),
-}
-
-use Layer::*;
-
-impl Display for Layer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Indoor => write!(f, "Indoor"),
-            NearSurface => write!(f, "Near Surface"),
-            SeaLevel => write!(f, "Sea Level"),
-            AGL(h) => write!(f, "{h} ft AGL"),
-            MSL(h) => write!(f, "{h} ft MSL"),
-            MBAR(h) => write!(f, "{h} mb"),
+    pub fn best_slp(&self) -> Option<f32> {
+        // dbg!(&self);
+        if let Some(Some(p)) = self.layers.get(&SeaLevel).map(|x| x.pressure) {
+            Some(p)
+        } else if let Some(Some(p)) = self.layers.get(&Indoor).map(|x| x.slp(self.latitude())) {
+            Some(p)
+        } else if let Some(Some(p)) = self.layers.get(&NearSurface).map(|x| x.slp(self.latitude())) {
+            Some(p)
+        } else {
+            None
         }
     }
+
+
+    pub fn sealevel(&self) -> Option<&WxEntryLayer> {
+        self.layers.get(&SeaLevel)
+    }
+
+    pub fn surface(&self) -> Option<&WxEntryLayer> {
+        self.layers.get(&NearSurface)
+    }
+
+    pub fn indoor(&self) -> Option<&WxEntryLayer> {
+        self.layers.get(&Indoor)
+    }
 }
+
+impl fmt::Debug for WxEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+        let mut parameters: Vec<String> = vec![];
+
+        parameters.push(self.date_time.to_string());
+        parameters.push(format!("{:?}", self.station));
+
+        if let Some(s) = &self.cape {
+            parameters.push(format!("CAPE: {s:.0}"))
+        }
+
+        if let Some(s) = &self.skycover {
+            parameters.push(s.to_string())
+        }
+
+        if let Some(s) = &self.precip_probability {
+            parameters.push(format!("Precip Prob: {}", s.to_string()))
+        }
+
+        if let Some(s) = &self.precip_today {
+            parameters.push(s.to_string())
+        }
+
+        if let Some(s) = &self.precip {
+            parameters.push(s.to_string())
+        }
+
+        if let Some(x) = &self.raw_metar {
+            parameters.push(format!("METAR: {}", x)); 
+        }
+
+
+
+        if let Some(x) = &self.present_wx {
+            let mut s: String = String::new();
+            
+            if x.is_empty() {
+                s += "Wx Codes: none";
+            } else {
+                s += "Wx Codes:";
+
+                for a in x {
+                    parameters.push(a.clone()); 
+                }
+            }
+        }
+
+        let layer_string = self.layers
+                            .iter()
+                            .map(|(_, x)| x.to_string())
+                            .collect::<Vec<String>>()
+                            .join(", ");
+
+        write!(f, "{}, {}", parameters.join(", "), layer_string)
+
+
+    }
+}
+
+
+// WXENTRYLAYER
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct WxEntryLayer {
@@ -299,7 +206,6 @@ impl WxEntryLayer {
     }
 
     pub fn wind(&self) -> Option<Wind> {
-
         if let (Some(direction), Some(speed)) = (self.wind_direction, self.wind_speed) {
             Some(Wind {
                 direction,
@@ -451,82 +357,6 @@ impl WxEntryLayer {
 }
 
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct WxEntry {
-    pub date_time: DateTime<Utc>,
-    pub station: Station,
-    
-    pub layers: HashMap<Layer, WxEntryLayer>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cape: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub skycover: Option<SkyCoverage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub present_wx: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_metar: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub precip_today: Option<Precip>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub precip: Option<Precip>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub precip_probability: Option<f32>,
-}
-
-impl WxEntry {
-
-    pub fn empty(station: &Station) -> WxEntry {
-        WxEntry {
-            date_time: DateTime::default(),
-            station: station.clone(),
-
-            layers: HashMap::new(),
-            
-            cape: None,
-            skycover: None,
-            precip_today: None,
-            precip: None,
-            precip_probability: None,
-            present_wx: None,
-            raw_metar: None,
-
-        }
-    } 
-
-    pub fn latitude(&self) -> f32 {
-        return self.station.coords.0;
-    }
-
-    pub fn best_slp(&self) -> Option<f32> {
-        // dbg!(&self);
-        if let Some(Some(p)) = self.layers.get(&SeaLevel).map(|x| x.pressure) {
-            Some(p)
-        } else if let Some(Some(p)) = self.layers.get(&Indoor).map(|x| x.slp(self.latitude())) {
-            Some(p)
-        } else if let Some(Some(p)) = self.layers.get(&NearSurface).map(|x| x.slp(self.latitude())) {
-            Some(p)
-        } else {
-            None
-        }
-    }
-
-
-    pub fn sealevel(&self) -> Option<&WxEntryLayer> {
-        self.layers.get(&SeaLevel)
-    }
-
-    pub fn surface(&self) -> Option<&WxEntryLayer> {
-        self.layers.get(&NearSurface)
-    }
-
-    pub fn indoor(&self) -> Option<&WxEntryLayer> {
-        self.layers.get(&Indoor)
-    }
-}
-
-
-
 impl fmt::Display for WxEntryLayer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut parameters: Vec<String> = vec![];
@@ -574,67 +404,217 @@ impl fmt::Display for WxEntryLayer {
     }
 }
 
-impl fmt::Debug for WxEntry {
+
+// LAYER
+
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum Layer {
+    Indoor,
+    NearSurface,
+    SeaLevel,
+    AGL(u64),
+    MSL(u64),
+    MBAR(u64),
+}
+
+use Layer::*;
+
+impl Display for Layer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-
-        let mut parameters: Vec<String> = vec![];
-
-        parameters.push(self.date_time.to_string());
-        parameters.push(format!("{:?}", self.station));
-
-        if let Some(s) = &self.cape {
-            parameters.push(format!("CAPE: {s:.0}"))
+        match self {
+            Indoor => write!(f, "Indoor"),
+            NearSurface => write!(f, "Near Surface"),
+            SeaLevel => write!(f, "Sea Level"),
+            AGL(h) => write!(f, "{h} ft AGL"),
+            MSL(h) => write!(f, "{h} ft MSL"),
+            MBAR(h) => write!(f, "{h} mb"),
         }
-
-        if let Some(s) = &self.skycover {
-            parameters.push(s.to_string())
-        }
-
-        if let Some(s) = &self.precip_probability {
-            parameters.push(format!("Precip Prob: {}", s.to_string()))
-        }
-
-        if let Some(s) = &self.precip_today {
-            parameters.push(s.to_string())
-        }
-
-        if let Some(s) = &self.precip {
-            parameters.push(s.to_string())
-        }
-
-        if let Some(x) = &self.raw_metar {
-            parameters.push(format!("METAR: {}", x)); 
-        }
-
-
-
-        if let Some(x) = &self.present_wx {
-            let mut s: String = String::new();
-            
-            if x.is_empty() {
-                s += "Wx Codes: none";
-            } else {
-                s += "Wx Codes:";
-
-                for a in x {
-                    parameters.push(a.clone()); 
-                }
-            }
-        }
-
-        let layer_string = self.layers
-                            .iter()
-                            .map(|(_, x)| x.to_string())
-                            .collect::<Vec<String>>()
-                            .join(", ");
-
-        write!(f, "{}, {}", parameters.join(", "), layer_string)
-
-
     }
 }
 
-pub type StationDatabase = BTreeMap<DateTime<Utc>, WxEntry>;
+
+#[derive(Clone, Copy, Serialize, Deserialize, Display)]
+pub struct Direction(u16); 
+
+impl Direction {
+    fn sanitize_degrees(degrees: u16) -> Result<u16> {
+        let degrees = if degrees > 360 {
+            bail!("Degrees provided ({degrees}) were not under 360.");
+        } else if degrees % 10 != 0 {
+            ((degrees + 5) / 10) * 10 // round to nearest 10
+        } else {
+            degrees
+        };
+
+        Ok(degrees % 360)
+    }
+
+    pub fn from_degrees(degrees: u16) -> Result<Direction> {
+        let corrected_degrees = Direction::sanitize_degrees(degrees)?;
+        Ok(Direction(corrected_degrees))
+    }
+
+    pub fn cardinal(&self) -> &'static str {
+        match self.0 {
+            0 => "N",
+            10 => "N",
+            20 => "NNE",
+            30 => "NNE",
+            40 => "NE",
+            50 => "NE",
+            60 => "ENE",
+            70 => "ENE",
+            80 => "E",
+            90 => "E",
+            100 => "E",
+            110 => "ESE",
+            120 => "ESE",
+            130 => "SE",
+            140 => "SE",
+            150 => "SSE",
+            160 => "SSE",
+            170 => "S",
+            180 => "S",
+            190 => "S",
+            200 => "SSW",
+            210 => "SSW",
+            220 => "SW",
+            230 => "SW",
+            240 => "WSW",
+            250 => "WSW",
+            260 => "W",
+            270 => "W",
+            280 => "W",
+            290 => "WNW",
+            300 => "WNW",
+            310 => "NW",
+            320 => "NW",
+            330 => "NNW",
+            340 => "NNW",
+            350 => "N",
+            _ => unreachable!("Direction struct contained {}, which is invalid.", self.0)
+        }
+    }
+
+    pub fn degrees(&self) -> u16 {
+        self.0
+    } 
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub struct Wind {
+    pub direction: Direction, // stored as degrees
+    pub speed: f32,
+}
+
+impl Display for Wind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}°@{} kts", self.direction.degrees(), self.speed)
+    }
+}
+
+
+#[derive(Serialize, Deserialize, Clone, Copy, Display, PartialEq)]
+pub enum CloudLayerCoverage {
+    #[display(fmt = "FEW")]
+    Few,
+    #[display(fmt = "SCT")]
+    Scattered,
+    #[display(fmt = "BKN")]
+    Broken,
+    #[display(fmt = "OVC")]
+    Overcast
+}
+
+impl CloudLayerCoverage {
+    pub fn str(&self) -> &'static str {
+        match self {
+            Self::Few => "FEW",
+            Self::Scattered => "SCT",
+            Self::Broken => "BKN",
+            Self::Overcast => "OVC",
+        } 
+    }
+}
+
+
+#[derive(Serialize, Deserialize, Clone, Copy)]
+pub struct CloudLayer {
+    pub coverage: CloudLayerCoverage,
+    pub height: u32, // given in feet
+}
+
+impl CloudLayer {   
+    pub fn from_code(code: &str, height: u32) -> Result<Option<CloudLayer>> {
+        let coverage_opt = match code {
+            "SKC" => None,
+            "CLR" => None,
+            "FEW" => Some(CloudLayerCoverage::Few),
+            "SCT" => Some(CloudLayerCoverage::Scattered),
+            "BKN" => Some(CloudLayerCoverage::Broken),
+            "OVC" => Some(CloudLayerCoverage::Overcast),
+            _ => bail!("Unknown cloud cover string '{code}'"),
+        };
+
+        match coverage_opt {
+            Some(coverage) => Ok(Some(CloudLayer {coverage, height})),
+            None => Ok(None),
+        }
+    }
+}
+
+impl fmt::Display for CloudLayer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}@{} ft", self.coverage.to_string(), self.height)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum SkyCoverage {
+    Clear,
+    Cloudy(Vec<CloudLayer>),
+}
+
+impl fmt::Display for SkyCoverage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Clear => write!(f, "CLR"),
+            Self::Cloudy(v) => {
+                write!(f, "{}", v.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", "))
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub struct Precip {
+    pub unknown: f32,
+    pub rain: f32,
+    pub snow: f32,
+}
+
+impl Display for Precip {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Rain: {}, Snow: {}, Unknown: {}", self.rain, self.snow, self.unknown)
+    }
+}
+
+
+
+// HELPER FUNCTIONS ------------------------------------------------------------
+
+pub fn ignore_none<T, R, F: FnMut(T) -> R>(a: Option<T>, mut f: F) -> Option<R> {
+    match a {
+        None => None,
+        Some(s) => {
+            let r = f(s); 
+            Some(r)
+        }
+    }
+} 
+
+
 
 #[cfg(test)]
 mod tests {
