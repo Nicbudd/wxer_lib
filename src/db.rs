@@ -1,37 +1,70 @@
-use std::{collections::BTreeMap, fs::File};
+use std::{collections::BTreeMap, fs::File, sync::Arc};
+use futures::lock::Mutex;
 use chrono::{DateTime, Duration, Utc};
 use super::*;
 
-pub type StationDatabase = BTreeMap<DateTime<Utc>, WxEntry>;
+pub type StationData = BTreeMap<DateTime<Utc>, WxEntry>;
+pub type StationDatabase = Arc<Mutex<StationData>>;
 
-pub async fn export_db(name: &str, date: DateTime<Utc>, db: &mut BTreeMap<DateTime<Utc>, WxEntry>) -> Result<()> {
+pub trait DatabaseFuncs { // not sure what to call this
+    #[allow(async_fn_in_trait)]
+    async fn add(&self, child: StationData, replace: bool);
+    #[allow(async_fn_in_trait)]
+    async fn export(&self, name: &str, date: DateTime<Utc>) -> Result<()>;
+    #[allow(async_fn_in_trait)]
+    async fn trim(&self);
+    #[allow(async_fn_in_trait)]
+    async fn full_update(&self, child: Result<StationData>, replace: bool, name: &str, date: DateTime<Utc>) -> Result<()>;
+}
 
-    let file_path: String = format!("data/{}_{}.json", name, date.format("%Y-%m-%d"));
 
-    let mut write_vec: BTreeMap<&DateTime<Utc>, &mut WxEntry> = BTreeMap::new();
+impl DatabaseFuncs for StationDatabase {
+    async fn add(&self, child: StationData, replace: bool) {
+        let mut db = self.lock().await;
+        for (k , v) in child {
+            if replace || !db.contains_key(&k) {
+                db.insert(k, v);
+            }
+        }
+    }
+    
+    async fn export(&self, name: &str, date: DateTime<Utc>) -> Result<()> {
+        let file_path: String = format!("data/{}_{}.json", name, date.format("%Y-%m-%d"));
+        let mut write_tree: StationData = BTreeMap::new();
+        
+        let db = self.lock().await;
+        for (dt, entry) in db.iter() {
+            if dt.date_naive() == date.date_naive() {
+                write_tree.insert(*dt,  entry.clone());
+            }
+        }
+        drop(db);
+    
+        let file = File::create(&file_path)?;
+        serde_json::ser::to_writer(file, &write_tree)?;
+    
+        Ok(())
+    }
 
-    for (dt, entry) in db {
-        if dt.date_naive() == date.date_naive() {
-            write_vec.insert(dt,  entry);
+    async fn trim(&self) {
+        let now = Utc::now();
+    
+        let mut db = self.lock().await;
+        let keys: Vec<_> = db.keys().cloned().collect();
+        for e in keys {
+            if e < now - Duration::days(2) {
+                db.remove(&e);
+            }
         }
     }
 
-    let file = File::create(&file_path)?;
+    async fn full_update(&self, child: Result<StationData>, replace: bool, name: &str, date: DateTime<Utc>) -> Result<()> {
+        let one_day = Duration::days(1);
 
-    serde_json::ser::to_writer(file, &write_vec)?;
-
-
-    Ok(())
-}
-
-pub async fn trim_db(db: &mut BTreeMap<DateTime<Utc>, WxEntry>) {
-    let now = Utc::now();
-
-    let keys: Vec<_> = db.keys().cloned().collect();
-
-    for e in keys {
-        if e < now - Duration::days(2) {
-            db.remove(&e);
-        }
+        self.add(child.unwrap_or_default(), replace).await;
+        self.export(name, date).await?;
+        self.export(name, date - one_day).await?;
+        self.trim().await;
+        Ok(())
     }
 }

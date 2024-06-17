@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{ignore_none, CloudLayer, Direction, Layer, Precip, SkyCoverage, Station, WxEntry, WxEntryLayer};
+use crate::{db::StationData, ignore_none, CloudLayer, Direction, Layer, Precip, SkyCoverage, Station, WxEntry, WxEntryLayer};
 
 use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::Deserialize;
 use anyhow::{bail, Result};
 
-pub async fn import(station: &str, network: &str, asos_db: &mut BTreeMap<DateTime<Utc>, WxEntry>) -> Result<()> {
+pub async fn import(station: &str, network: &str) -> Result<StationData> {
     let url = format!("http://mesonet.agron.iastate.edu/json/current.py?station={}&network={}", station, network);
 
     //dbg!(&url);
@@ -56,44 +56,55 @@ pub async fn import(station: &str, network: &str, asos_db: &mut BTreeMap<DateTim
         Precip{unknown: x, rain: 0., snow: 0.}
     });
 
-    if !asos_db.contains_key(&dt) {
+    let mut asos_db = BTreeMap::new();
 
-        let near_surface = WxEntryLayer { 
-            layer: Layer::NearSurface, 
-            height_agl: Some(2.0), 
-            height_msl: Some(station.altitude), 
-            temperature: raw_ob.last_ob.airtempF, 
-            dewpoint: raw_ob.last_ob.dewpointtempF, 
-            pressure: None, 
-            wind_direction, 
-            wind_speed: raw_ob.last_ob.windspeedkt, 
-            visibility: raw_ob.last_ob.visibilitymile,
-        };
+    let near_surface = WxEntryLayer { 
+        layer: Layer::NearSurface, 
+        height_agl: Some(2.0), 
+        height_msl: Some(station.altitude), 
+        temperature: raw_ob.last_ob.airtempF, 
+        dewpoint: raw_ob.last_ob.dewpointtempF, 
+        pressure: None, 
+        wind_direction, 
+        wind_speed: raw_ob.last_ob.windspeedkt, 
+        visibility: raw_ob.last_ob.visibilitymile,
+    };
 
-        let mut layers = HashMap::new();
+    let sea_level = WxEntryLayer { 
+        layer: Layer::SeaLevel, 
+        height_agl: None, 
+        height_msl: Some(0.0), 
+        temperature: None, 
+        dewpoint: None, 
+        pressure: raw_ob.last_ob.mslpmb, 
+        wind_direction: None, 
+        wind_speed: None, 
+        visibility: None,
+    };
 
-        layers.insert(Layer::NearSurface, near_surface);
+    let mut layers = HashMap::new();
 
-        let entry: WxEntry = WxEntry { 
-            date_time: dt,
-            station: station.clone(),
+    layers.insert(Layer::NearSurface, near_surface);
+    layers.insert(Layer::SeaLevel, sea_level);
 
-            layers,
+    let entry: WxEntry = WxEntry { 
+        date_time: dt,
+        station: station.clone(),
 
-            cape: None,
-            skycover,
-            raw_metar: None,
-            precip_today,
-            precip: None,
-            precip_probability: None,
-            present_wx: None
-        };
+        layers,
 
-        asos_db.insert(dt, entry);
-    }
+        cape: None,
+        skycover,
+        raw_metar: raw_ob.last_ob.raw,
+        precip_today,
+        precip: None,
+        precip_probability: None,
+        present_wx: None
+    };
 
-    Ok(())
+    asos_db.insert(dt, entry);
 
+    Ok(asos_db)
 }
 
 

@@ -4,7 +4,7 @@ use chrono::{DateTime, Duration, Timelike, Utc};
 use anyhow::Result;
 use serde::Deserialize;
 
-use crate::{Layer, Station, WxEntry, WxEntryLayer};
+use crate::{db::StationData, Layer, Station, WxEntry, WxEntryLayer};
 
 
 // Imports data from my raspberry pi station.
@@ -13,10 +13,7 @@ use crate::{Layer, Station, WxEntry, WxEntryLayer};
 
 // station URL is going to be something like http://rpi_address:8000
 // todo: better name for rpi station
-pub async fn import(
-    station_url: String, date: DateTime<Utc>, 
-    local_db: &mut BTreeMap<DateTime<Utc>, WxEntry>
-) -> Result<()> {
+pub async fn import(station_url: &str, date: DateTime<Utc>) -> Result<StationData> {
 
     let station_data_url = format!("{station_url}/location.json");
     let station = reqwest::get(station_data_url)
@@ -36,6 +33,8 @@ pub async fn import(
 
     let mut reader = csv::Reader::from_reader(csv_string.as_bytes());
 
+    let mut local_db = BTreeMap::new();
+
     for record in reader.deserialize() {
         let record: RawStationEntry = record?;
 
@@ -43,57 +42,54 @@ pub async fn import(
         let mut dt = time_string.parse::<DateTime<Utc>>()?;
         dt = dt - Duration::seconds(dt.second() as i64 + 60); // to account for when the data collection ends
 
-        if !local_db.contains_key(&dt) {
+        let indoor = WxEntryLayer {
+            layer: Layer::Indoor,
+            height_agl: Some(2.0),
+            height_msl: Some(altitude),
+            temperature: record.indoor_temp,
+            dewpoint: None,
+            pressure: record.raw_pres,
+            wind_direction: None,
+            wind_speed: None,
+            visibility: None,
+        };
 
-            let indoor = WxEntryLayer {
-                layer: Layer::Indoor,
-                height_agl: Some(2.0),
-                height_msl: Some(altitude),
-                temperature: record.indoor_temp,
-                dewpoint: None,
-                pressure: record.raw_pres,
-                wind_direction: None,
-                wind_speed: None,
-                visibility: None,
-            };
+        let near_surface = WxEntryLayer {
+            layer: Layer::NearSurface,
+            height_agl: Some(2.0),
+            height_msl: Some(altitude),
+            temperature: record.outdoor_temp,
+            dewpoint: record.dewpoint,
+            pressure: record.raw_pres,
+            wind_direction: None,
+            wind_speed: None,
+            visibility: None,
+        };
 
-            let near_surface = WxEntryLayer {
-                layer: Layer::NearSurface,
-                height_agl: Some(2.0),
-                height_msl: Some(altitude),
-                temperature: record.outdoor_temp,
-                dewpoint: record.dewpoint,
-                pressure: record.raw_pres,
-                wind_direction: None,
-                wind_speed: None,
-                visibility: None,
-            };
+        let mut layers = HashMap::new();
 
-            let mut layers = HashMap::new();
+        layers.insert(Layer::Indoor, indoor);
+        layers.insert(Layer::NearSurface, near_surface);
 
-            layers.insert(Layer::Indoor, indoor);
-            layers.insert(Layer::NearSurface, near_surface);
+        let entry: WxEntry = WxEntry {
+            date_time: dt,
+            station: station.clone(),
 
-            let entry: WxEntry = WxEntry {
-                date_time: dt,
-                station: station.clone(),
+            layers,
+            
+            cape: None,
+            skycover: None,
+            raw_metar: None,
+            precip_today: None,
+            precip: None,
+            precip_probability: None,
+            present_wx: None
+        };
 
-                layers,
-                
-                cape: None,
-                skycover: None,
-                raw_metar: None,
-                precip_today: None,
-                precip: None,
-                precip_probability: None,
-                present_wx: None
-            };
-    
-            local_db.insert(dt, entry);
-        }
+        local_db.insert(dt, entry);
     } 
 
-    Ok(())
+    Ok(local_db)
 }
 
 #[derive(Debug, Deserialize)]

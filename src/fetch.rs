@@ -11,4 +11,5 @@
 pub mod unh;
 pub mod asos;
 pub mod rpi_station;
+pub mod climate_normals;
 pub mod open_meteo;

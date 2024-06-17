@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{rh_to_dewpoint, Direction, Layer, Precip, Station, WxEntry, WxEntryLayer};
+use crate::{db::StationData, rh_to_dewpoint, Direction, Layer, Precip, Station, WxEntry, WxEntryLayer};
 
 use chrono::{offset::LocalResult, DateTime, Datelike, Local, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::US::Eastern;
 use serde::Deserialize;
 use anyhow::Result;
 
-pub async fn import(db: &mut BTreeMap<DateTime<Utc>, WxEntry>, date: DateTime<Utc>) -> Result<()> {
+pub async fn import(date: DateTime<Utc>) -> Result<StationData> {
 
     let day = date.with_timezone(&Eastern).ordinal();
     let year = date.with_timezone(&Eastern).year();
@@ -19,16 +19,16 @@ pub async fn import(db: &mut BTreeMap<DateTime<Utc>, WxEntry>, date: DateTime<Ut
 
     let mut rdr = csv::Reader::from_reader(unh_text.as_bytes());
 
+    let mut db = BTreeMap::new();
+
     for entry_result in rdr.deserialize() {
         let entry: UNHWxEntry = entry_result?;
         let wx_entry: WxEntry = entry.to_wx_entry();
 
-        // dbg!(&wx_entry);
-
-        let _ = db.insert(wx_entry.date_time, wx_entry);
+        db.insert(wx_entry.date_time, wx_entry);
     }
 
-    Ok(())
+    Ok(db)
 
     // Ok(result_map)
 }
