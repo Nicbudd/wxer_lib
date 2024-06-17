@@ -4,7 +4,19 @@ use chrono::{DateTime, Duration, Utc};
 use super::*;
 
 pub type StationData = BTreeMap<DateTime<Utc>, WxEntry>;
-pub type StationDatabase = Arc<Mutex<StationData>>;
+pub type StationDatabase = Arc<Mutex<StationDatabaseInternal>>;
+#[derive(Debug, Clone)]
+pub struct StationDatabaseInternal {
+    pub station: Station,
+    pub data: StationData
+}
+
+pub fn new_station_db(station: Station) -> StationDatabase {
+    return Arc::new(Mutex::from(StationDatabaseInternal {
+        station: station,
+        data: BTreeMap::new()
+    }))
+}
 
 pub trait DatabaseFuncs { // not sure what to call this
     #[allow(async_fn_in_trait)]
@@ -22,8 +34,8 @@ impl DatabaseFuncs for StationDatabase {
     async fn add(&self, child: StationData, replace: bool) {
         let mut db = self.lock().await;
         for (k , v) in child {
-            if replace || !db.contains_key(&k) {
-                db.insert(k, v);
+            if replace || !db.data.contains_key(&k) {
+                db.data.insert(k, v);
             }
         }
     }
@@ -33,7 +45,7 @@ impl DatabaseFuncs for StationDatabase {
         let mut write_tree: StationData = BTreeMap::new();
         
         let db = self.lock().await;
-        for (dt, entry) in db.iter() {
+        for (dt, entry) in db.data.iter() {
             if dt.date_naive() == date.date_naive() {
                 write_tree.insert(*dt,  entry.clone());
             }
@@ -50,10 +62,10 @@ impl DatabaseFuncs for StationDatabase {
         let now = Utc::now();
     
         let mut db = self.lock().await;
-        let keys: Vec<_> = db.keys().cloned().collect();
+        let keys: Vec<_> = db.data.keys().cloned().collect();
         for e in keys {
             if e < now - Duration::days(2) {
-                db.remove(&e);
+                db.data.remove(&e);
             }
         }
     }
