@@ -122,7 +122,8 @@ impl UNHWxEntry {
                 snow: 0.,
                 unknown: 0.,
             }), 
-            precip_probability: None 
+            precip_probability: None,
+            altimeter: None
         }
     }
 }

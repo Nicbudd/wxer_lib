@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{db::StationData, ignore_none, CloudLayer, Direction, Layer, Precip, SkyCoverage, Station, WxEntry, WxEntryLayer};
+use crate::{db::StationData, ignore_none, inhg_to_hpa, CloudLayer, Direction, Layer, Precip, SkyCoverage, Station, WxEntry, WxEntryLayer};
 
 use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::Deserialize;
@@ -10,30 +10,6 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
     let url = format!("http://mesonet.agron.iastate.edu/json/current.py?station={}&network={}", station_name, network);
 
     //dbg!(&url);
-
-    // let psm_station: Station = Station {
-    //     coords: (43.08, -70.82),
-    //     altitude: 30.,
-    //     name: String::from("KPSM"),
-    // };  
-
-    // let mht_station: Station = Station {
-    //     coords: (42.93, -71.43),
-    //     altitude: 81.,
-    //     name: String::from("KMHT"),
-    // };   
-
-    // let unknown_station: Station = Station { 
-    //     name: "UNKNOWN".into(), 
-    //     altitude: (f32::NAN), 
-    //     coords: (f32::NAN, f32::NAN) 
-    // };
-
-    // let station = match (station_name, network) {
-    //     ("PSM", "NH_ASOS") => {psm_station},
-    //     ("MHT", "NH_ASOS") => {mht_station},
-    //     (name, _) => {let mut s = unknown_station.clone(); s.name = String::from(name); s},
-    // };
 
     let resp: String = reqwest::get(url)
         .await?
@@ -99,7 +75,8 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
         precip_today,
         precip: None,
         precip_probability: None,
-        present_wx: None
+        present_wx: None,
+        altimeter: raw_ob.last_ob.altimeterin.map(|x| inhg_to_hpa(x))
     };
 
     asos_db.insert(dt, entry);

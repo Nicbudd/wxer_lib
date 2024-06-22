@@ -83,7 +83,8 @@ pub async fn import(station_url: &str, date: DateTime<Utc>) -> Result<StationDat
             precip_today: None,
             precip: None,
             precip_probability: None,
-            present_wx: None
+            present_wx: None,
+            altimeter: None,
         };
 
         local_db.insert(dt, entry);

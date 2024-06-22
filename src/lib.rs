@@ -53,6 +53,8 @@ pub struct WxEntry {
     pub precip: Option<Precip>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub precip_probability: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub altimeter: Option<f32>,
 }
 
 impl WxEntry {
@@ -71,7 +73,7 @@ impl WxEntry {
             precip_probability: None,
             present_wx: None,
             raw_metar: None,
-
+            altimeter: None,
         }
     } 
 
@@ -80,16 +82,21 @@ impl WxEntry {
     }
 
     pub fn best_slp(&self) -> Option<f32> {
-        // dbg!(&self);
-        if let Some(Some(p)) = self.layers.get(&SeaLevel).map(|x| x.pressure) {
-            Some(p)
-        } else if let Some(Some(p)) = self.layers.get(&Indoor).map(|x| x.slp(self.latitude())) {
-            Some(p)
-        } else if let Some(Some(p)) = self.layers.get(&NearSurface).map(|x| x.slp(self.latitude())) {
-            Some(p)
-        } else {
-            None
-        }
+        let option_1 = {self.layers.get(&SeaLevel)?.pressure};
+        let option_2 = {self.layers.get(&Indoor)?.slp(self.latitude())};
+        let option_3 = {self.layers.get(&NearSurface)?.slp(self.latitude())};
+        let option_4 = {self.altimeter_to_slp()};
+
+        option_1.or(option_2).or(option_3).or(option_4)
+    }
+
+    pub fn altimeter_to_station(&self) -> Option<f32> {
+        Some(altimeter_to_station(self.altimeter?, self.station.altitude))
+    }
+
+    pub fn altimeter_to_slp(&self) -> Option<f32> {
+        let surface = self.layers.get(&NearSurface)?;
+        Some(altimeter_to_slp(self.altimeter?, self.station.altitude, surface.temperature?))
     }
 
 
@@ -265,7 +272,6 @@ impl WxEntryLayer {
             None
         }
     }
-
 
     // None - Incomplete Data
     // Some(true) - wind chill is within valid temp & wind range
