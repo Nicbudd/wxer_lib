@@ -82,9 +82,9 @@ impl WxEntry {
     }
 
     pub fn best_slp(&self) -> Option<f32> {
-        let option_1 = {self.layers.get(&SeaLevel)?.pressure};
-        let option_2 = {self.layers.get(&Indoor)?.slp(self.latitude())};
-        let option_3 = {self.layers.get(&NearSurface)?.slp(self.latitude())};
+        let option_1 = {self.layers.get(&SeaLevel).map(|x| x.pressure).flatten()};
+        let option_2 = {self.layers.get(&Indoor).map(|x| x.slp(self.latitude())).flatten()};
+        let option_3 = {self.layers.get(&NearSurface).map(|x| x.slp(self.latitude())).flatten()};
         let option_4 = {self.altimeter_to_slp()};
 
         option_1.or(option_2).or(option_3).or(option_4)
