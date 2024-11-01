@@ -32,6 +32,8 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
         Precip{unknown: x, rain: 0., snow: 0.}
     });
 
+    let present_wx = raw_ob.last_ob.present_wx;
+
     let mut asos_db = BTreeMap::new();
 
     let near_surface = WxEntryLayer { 
@@ -75,7 +77,7 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
         precip_today,
         precip: None,
         precip_probability: None,
-        present_wx: None,
+        present_wx,
         altimeter: raw_ob.last_ob.altimeterin.map(|x| inhg_to_hpa(x))
     };
 
