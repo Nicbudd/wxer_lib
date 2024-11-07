@@ -7,6 +7,7 @@ use anyhow::{Result, bail};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use derive_more::Display;
+// use regex::Regex;
 
 pub mod fetch;
 // use fetch::*;
@@ -55,6 +56,8 @@ pub struct WxEntry {
     pub precip_probability: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub altimeter: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub best_slp: Option<f32>,
 }
 
 impl WxEntry {
@@ -74,6 +77,8 @@ impl WxEntry {
             present_wx: None,
             raw_metar: None,
             altimeter: None,
+            
+            best_slp: None,
         }
     } 
 
@@ -83,8 +88,8 @@ impl WxEntry {
 
     pub fn best_slp(&self) -> Option<f32> {
         let option_1 = {self.layers.get(&SeaLevel).map(|x| x.pressure).flatten()};
-        let option_2 = {self.layers.get(&Indoor).map(|x| x.slp(self.latitude())).flatten()};
-        let option_3 = {self.layers.get(&NearSurface).map(|x| x.slp(self.latitude())).flatten()};
+        let option_2 = {self.layers.get(&NearSurface).map(|x| x.slp(self.latitude())).flatten()};
+        let option_3 = {self.layers.get(&Indoor).map(|x| x.slp(self.latitude())).flatten()};
         let option_4 = {self.altimeter_to_slp()};
 
         option_1.or(option_2).or(option_3).or(option_4)
@@ -111,7 +116,27 @@ impl WxEntry {
     pub fn indoor(&self) -> Option<&WxEntryLayer> {
         self.layers.get(&Indoor)
     }
+
+    pub fn fill_in_calculated_values(&mut self) {
+        let lat = self.latitude();
+        for e in self.layers.iter_mut() {
+            e.1.fill_in_calculated_values(lat);
+        }
+
+        self.best_slp = self.best_slp();
+    }
 }
+
+
+
+// #[derive(Clone, Serialize, Deserialize)]
+// pub struct WxEntryCalculated {
+//     #[serde(skip_serializing_if = "Option::is_none")]
+//     
+
+//     pub layers: HashMap<Layer, WxEntryLayerCalculated>,
+// }
+
 
 impl fmt::Debug for WxEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -195,7 +220,26 @@ pub struct WxEntryLayer {
     pub wind_speed: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visibility: Option<f32>,
+
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // pub wind: Option<Wind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relative_humidity: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slp: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wind_chill: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub heat_index: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub apparent_temp: Option<f32>,
 }
+
+// #[derive(Clone, Serialize, Deserialize)]
+// pub struct WxEntryLayerCalculated {
+
+// }
+
 
 impl WxEntryLayer {
     pub fn empty(layer: Layer) -> WxEntryLayer {
@@ -209,6 +253,13 @@ impl WxEntryLayer {
             wind_direction: None,
             wind_speed: None,
             visibility: None,
+
+            // wind: None,
+            relative_humidity: None,
+            slp: None,
+            wind_chill: None,
+            heat_index: None,
+            apparent_temp: None,
         }
     }
 
@@ -223,7 +274,7 @@ impl WxEntryLayer {
         } 
     }
 
-    pub fn relative_humidity_2m(&self) -> Option<f32> { // in percentage
+    pub fn relative_humidity(&self) -> Option<f32> { // in percentage
         if let (Some(temp_f), Some(dewp_f)) = (self.temperature, self.dewpoint) {
             let t = f_to_c(temp_f);
             let dp = f_to_c(dewp_f);
@@ -309,14 +360,13 @@ impl WxEntryLayer {
     }
 
 
-
     // None - Incomplete Data
     // Some(true) - heat index is within valid temp & humidity range
     // Some(false) - heat index is outside valid temp & humidity range
     pub fn heat_index_valid(&self) -> Option<bool> {
         if let Some(t) = self.temperature {
             if t > 80. {
-                if let Some(rh) = self.relative_humidity_2m() {
+                if let Some(rh) = self.relative_humidity() {
                     Some(rh > 40.)
                 } else {
                     None
@@ -331,7 +381,7 @@ impl WxEntryLayer {
 
     // from Wikipedia: https://en.wikipedia.org/wiki/Heat_index
     pub fn heat_index(&self) -> Option<f32> {
-        if let (Some(t), Some(rh)) = (self.temperature, self.relative_humidity_2m()) {
+        if let (Some(t), Some(rh)) = (self.temperature, self.relative_humidity()) {
             if self.heat_index_valid() == Some(true) {
                 const C: [f32; 10] = [0.0, -42.379, 2.04901523, 10.14333127, -0.22475541, -0.00683783, -0.05481717, 0.00122874, 0.00085282, -0.00000199];
                 Some((C[1]) + (C[2]*t) + (C[3]*rh) + (C[4]*t*rh) + (C[5]*t*t) + (C[6]*rh*rh) + (C[7]*t*t*rh) + (C[8]*t*rh*rh) + (C[9]*t*t*rh*rh))
@@ -358,6 +408,15 @@ impl WxEntryLayer {
         } else {
             None
         }
+    }
+
+    pub fn fill_in_calculated_values(&mut self, latitude: f32) {
+        // self.wind = self.wind();
+        self.relative_humidity = self.relative_humidity();
+        self.slp = self.slp(latitude);
+        self.wind_chill = self.wind_chill();
+        self.heat_index = self.heat_index();
+        self.apparent_temp = self.apparent_temp();
     }
 
 }
@@ -409,7 +468,6 @@ impl fmt::Display for WxEntryLayer {
         write!(f, "{}", full_string)
     }
 }
-
 
 // LAYER
 
@@ -519,6 +577,10 @@ impl Display for Wind {
     }
 }
 
+// impl Wind {
+//     pub 
+// }
+
 
 #[derive(Serialize, Deserialize, Clone, Copy, Display, PartialEq)]
 pub enum CloudLayerCoverage {
@@ -605,6 +667,9 @@ impl Display for Precip {
         write!(f, "Rain: {}, Snow: {}, Unknown: {}", self.rain, self.snow, self.unknown)
     }
 }
+
+
+
 
 
 

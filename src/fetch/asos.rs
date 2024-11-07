@@ -46,6 +46,12 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
         wind_direction, 
         wind_speed: raw_ob.last_ob.windspeedkt, 
         visibility: raw_ob.last_ob.visibilitymile,
+
+        relative_humidity: None,
+        slp: None,
+        wind_chill: None,
+        heat_index: None,
+        apparent_temp: None,
     };
 
     let sea_level = WxEntryLayer { 
@@ -58,6 +64,12 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
         wind_direction: None, 
         wind_speed: None, 
         visibility: None,
+
+        relative_humidity: None,
+        slp: None,
+        wind_chill: None,
+        heat_index: None,
+        apparent_temp: None,
     };
 
     let mut layers = HashMap::new();
@@ -65,7 +77,7 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
     layers.insert(Layer::NearSurface, near_surface);
     layers.insert(Layer::SeaLevel, sea_level);
 
-    let entry: WxEntry = WxEntry { 
+    let mut entry: WxEntry = WxEntry { 
         date_time: dt,
         station: station.clone(),
 
@@ -78,8 +90,12 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
         precip: None,
         precip_probability: None,
         present_wx,
-        altimeter: raw_ob.last_ob.altimeterin.map(|x| inhg_to_hpa(x))
+        altimeter: raw_ob.last_ob.altimeterin.map(|x| inhg_to_hpa(x)),
+
+        best_slp: None,
     };
+
+    entry.fill_in_calculated_values();
 
     asos_db.insert(dt, entry);
 

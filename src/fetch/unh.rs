@@ -105,10 +105,16 @@ impl UNHWxEntry {
             pressure: None, 
             wind_direction: Direction::from_degrees(self.wind_dir as u16).ok(), 
             wind_speed: Some(self.wind_speed), 
-            visibility: None 
+            visibility: None,
+
+            relative_humidity: None,
+            slp: None,
+            wind_chill: None,
+            heat_index: None,
+            apparent_temp: None,
         });
     
-        WxEntry { 
+        let mut entry = WxEntry { 
             date_time: self.dt, 
             station: unh_station, 
             layers, 
@@ -123,7 +129,14 @@ impl UNHWxEntry {
                 unknown: 0.,
             }), 
             precip_probability: None,
-            altimeter: None
-        }
+            altimeter: None,
+
+            best_slp: None,
+        };
+
+        entry.fill_in_calculated_values();
+
+        return entry
+
     }
 }
