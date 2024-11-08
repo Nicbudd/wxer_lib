@@ -89,7 +89,8 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
         precip_today,
         precip: None,
         precip_probability: None,
-        present_wx,
+        wx: None,
+        wx_codes: present_wx,
         altimeter: raw_ob.last_ob.altimeterin.map(|x| inhg_to_hpa(x)),
 
         best_slp: None,

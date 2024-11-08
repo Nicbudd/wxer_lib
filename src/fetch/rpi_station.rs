@@ -56,7 +56,7 @@ fn try_parse_entry(record: Result<RawStationEntry, csv::Error>, altitude: f32, s
     let mut dt = time_string.trim().chars().filter(|x| x != &'\0').collect::<String>().parse::<DateTime<Utc>>()?;
     dt = dt - Duration::seconds(dt.second() as i64 + 60); // to account for when the data collection ends
 
-    let mut indoor = WxEntryLayer {
+    let indoor = WxEntryLayer {
         layer: Layer::Indoor,
         height_agl: Some(2.0),
         height_msl: Some(altitude),
@@ -73,8 +73,6 @@ fn try_parse_entry(record: Result<RawStationEntry, csv::Error>, altitude: f32, s
         heat_index: None,
         apparent_temp: None,
     };
-
-    indoor.fill_in_calculated_values(station.coords.0);
 
     let near_surface = WxEntryLayer {
         layer: Layer::NearSurface,
@@ -99,9 +97,9 @@ fn try_parse_entry(record: Result<RawStationEntry, csv::Error>, altitude: f32, s
     layers.insert(Layer::Indoor, indoor);
     layers.insert(Layer::NearSurface, near_surface);
 
-    let entry: WxEntry = WxEntry {
+    let mut entry: WxEntry = WxEntry {
         date_time: dt,
-        station: station,
+        station,
 
         layers,
         
@@ -111,11 +109,14 @@ fn try_parse_entry(record: Result<RawStationEntry, csv::Error>, altitude: f32, s
         precip_today: None,
         precip: None,
         precip_probability: None,
-        present_wx: None,
+        wx: None,
+        wx_codes: None,
         altimeter: None,
 
         best_slp: None,
     };
+    
+    entry.fill_in_calculated_values();
 
     Ok((dt, entry))
 }

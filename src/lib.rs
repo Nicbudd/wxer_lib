@@ -7,7 +7,7 @@ use anyhow::{Result, bail};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use derive_more::Display;
-// use regex::Regex;
+use regex::Regex;
 
 pub mod fetch;
 // use fetch::*;
@@ -45,7 +45,9 @@ pub struct WxEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub skycover: Option<SkyCoverage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub present_wx: Option<Vec<String>>,
+    pub wx_codes: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wx: Option<Wx>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_metar: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -74,7 +76,8 @@ impl WxEntry {
             precip_today: None,
             precip: None,
             precip_probability: None,
-            present_wx: None,
+            wx_codes: None,
+            wx: None,
             raw_metar: None,
             altimeter: None,
             
@@ -117,12 +120,22 @@ impl WxEntry {
         self.layers.get(&Indoor)
     }
 
+    pub fn wx_from_codes(&self) -> Option<Wx> {
+        let mut wx = Wx::none();
+        let codes = self.wx_codes.clone()?; // stupid, why do I have to clone here
+        for code in codes {
+            wx = wx.combine(Wx::parse_code(&code));
+        }
+        Some(wx)
+    }
+
     pub fn fill_in_calculated_values(&mut self) {
         let lat = self.latitude();
         for e in self.layers.iter_mut() {
             e.1.fill_in_calculated_values(lat);
         }
 
+        self.wx_from_codes();
         self.best_slp = self.best_slp();
     }
 }
@@ -172,7 +185,7 @@ impl fmt::Debug for WxEntry {
 
 
 
-        if let Some(x) = &self.present_wx {
+        if let Some(x) = &self.wx_codes {
             let mut s: String = String::new();
             
             if x.is_empty() {
@@ -577,10 +590,6 @@ impl Display for Wind {
     }
 }
 
-// impl Wind {
-//     pub 
-// }
-
 
 #[derive(Serialize, Deserialize, Clone, Copy, Display, PartialEq)]
 pub enum CloudLayerCoverage {
@@ -671,8 +680,6 @@ impl Display for Precip {
 
 
 
-
-
 // HELPER FUNCTIONS ------------------------------------------------------------
 
 pub fn ignore_none<T, R, F: FnMut(T) -> R>(a: Option<T>, mut f: F) -> Option<R> {
@@ -684,6 +691,171 @@ pub fn ignore_none<T, R, F: FnMut(T) -> R>(a: Option<T>, mut f: F) -> Option<R> 
         }
     }
 } 
+
+
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Wx { 
+    pub blowing: bool,
+    pub freezing: bool,
+    pub showers: bool,
+    pub squalls: bool,
+    pub thunderstorm: bool,
+    pub fog: bool,
+    pub smoke: bool,
+    
+    pub visibility_inhibitor: bool,
+    
+    #[serde(skip_serializing_if = "Intensity::is_none")]
+    pub rain: Intensity,
+    #[serde(skip_serializing_if = "Intensity::is_none")]
+    pub snow: Intensity,
+    #[serde(skip_serializing_if = "Intensity::is_none")]
+    pub falling_ice: Intensity,    
+    #[serde(skip_serializing_if = "Intensity::is_none")]
+    pub dust: Intensity,
+    #[serde(skip_serializing_if = "Intensity::is_none")]
+    pub sand: Intensity,
+    #[serde(skip_serializing_if = "Intensity::is_none")]
+    pub funnel_cloud: Intensity, // light: FC, heavy: Tornado
+    #[serde(skip_serializing_if = "Intensity::is_none")]
+    pub unknown: Intensity, // light: FC, heavy: Tornado
+}
+
+impl Wx {
+    pub fn none() -> Wx {
+        use Intensity::None;
+        Wx {
+            blowing: false, freezing: false, showers: false, squalls: false, 
+            thunderstorm: false, visibility_inhibitor: false, fog: false,
+            smoke: false,
+            unknown: None, rain: None, snow: None, falling_ice: None, 
+            dust: None, sand: None, funnel_cloud: None,
+        }
+    }
+
+    pub fn combine(self, other: Wx) -> Wx {
+        Wx {
+            blowing: self.blowing || other.blowing,
+            freezing: self.freezing || other.freezing,
+            showers: self.showers || other.showers,
+            squalls: self.squalls || other.squalls,
+            thunderstorm: self.thunderstorm || other.thunderstorm,
+            visibility_inhibitor: self.visibility_inhibitor || other.visibility_inhibitor,
+            fog: self.fog || other.fog,
+            smoke: self.smoke || other.smoke,
+            rain: self.rain.most_intense(other.rain),
+            snow: self.snow.most_intense(other.snow),
+            falling_ice: self.falling_ice.most_intense(other.falling_ice),
+            dust: self.dust.most_intense(other.dust),
+            sand: self.sand.most_intense(other.sand),
+            funnel_cloud: self.funnel_cloud.most_intense(other.funnel_cloud),
+            unknown: self.unknown.most_intense(other.unknown),
+        }
+    }
+
+    pub fn parse_code(code: &str) -> Wx {
+        let re = Regex::new(r"(-|\+|BC|BL|BR|DR|DS|DU|DZ|FC|FG|FU|FZ|GR|GS|HZ|IC|MI|NSW|PL|PO|PR|PY|RA|SA|SG|SH|SN|SQ|SS|TS|UP|VA|VC|/+)").unwrap();
+        
+        let matches: Vec<&str> = re.find_iter(code).map(|x| x.as_str()).collect();
+
+        let mut wx = Wx::none();
+        let general_intensity;
+
+        if matches.contains(&"VC") {
+            general_intensity = Intensity::Nearby;
+        } else if matches.contains(&"-") {
+            general_intensity = Intensity::Light;
+        } else if matches.contains(&"+") {
+            general_intensity = Intensity::Heavy;
+        } else {
+            general_intensity = Intensity::Medium;
+        }
+
+        wx.freezing = matches.contains(&"FZ");
+        wx.showers = matches.contains(&"SH");
+        wx.blowing = matches.contains(&"BL") || matches.contains(&"SS") || matches.contains(&"PO") || matches.contains(&"DS");
+        wx.squalls = matches.contains(&"SQ");
+        wx.thunderstorm = matches.contains(&"TS");
+        wx.fog = matches.contains(&"BR") || matches.contains(&"FG");
+        wx.smoke = matches.contains(&"FU") || matches.contains(&"HZ");
+
+        if matches.contains(&"RA") {
+            wx.rain = general_intensity
+        } else if matches.contains(&"DZ") {
+            wx.rain = Intensity::VeryLight
+        }
+
+        if matches.contains(&"DU") {
+            wx.dust = general_intensity
+        } else if matches.contains(&"DS") {
+            wx.dust = Intensity::Heavy
+        }
+
+        if matches.contains(&"SA") || matches.contains(&"PO") {
+            wx.sand = general_intensity
+        } else if matches.contains(&"SS") {
+            wx.sand = Intensity::Heavy
+        }
+
+        if matches.contains(&"PL") {
+            wx.falling_ice = general_intensity
+        } else if matches.contains(&"GR") {
+            wx.sand = Intensity::Heavy
+        }
+
+        if matches.contains(&"UP") {
+            wx.unknown = general_intensity
+        }
+
+        if matches.contains(&"SN") || matches.contains(&"GS") || 
+           matches.contains(&"IC") || matches.contains(&"SG") {
+            wx.snow = general_intensity;
+        }
+
+        if matches.contains(&"FC") {
+            wx.funnel_cloud = general_intensity;
+        }
+
+        // for now we'll intentionally ignore BC,DR,MI,PR,PY,NSW
+        wx
+    }
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
+pub enum Intensity {
+    None,
+    Nearby,
+    VeryLight,
+    Light,
+    Medium,
+    Heavy,
+}
+
+impl Intensity {
+    pub fn is_none(&self) -> bool {
+        return self == &Self::None
+    }
+    pub fn most_intense(self, other: Intensity) -> Intensity {
+        if self > other {
+            self
+        } else {
+            other
+        }
+    }
+}
+
+// #[derive(Debug, Clone, Serialize)]
+// pub struct WxCode {
+//     pub code: String,
+//     pub partial_wx: Wx
+// }
+
+// impl WxCode {
+
+// }
+
+
 
 
 

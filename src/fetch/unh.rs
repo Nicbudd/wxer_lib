@@ -120,7 +120,7 @@ impl UNHWxEntry {
             layers, 
             cape: None, 
             skycover: None, 
-            present_wx: None, 
+            wx_codes: None, 
             raw_metar: None, 
             precip_today: None, 
             precip: Some(Precip {
@@ -130,7 +130,8 @@ impl UNHWxEntry {
             }), 
             precip_probability: None,
             altimeter: None,
-
+            
+            wx: None,
             best_slp: None,
         };
 
