@@ -131,8 +131,9 @@ impl WxEntry {
 
     pub fn fill_in_calculated_values(&mut self) {
         let lat = self.latitude();
+        let alt = self.altimeter;
         for e in self.layers.iter_mut() {
-            e.1.fill_in_calculated_values(lat);
+            e.1.fill_in_calculated_values(lat, alt);
         }
 
         self.wx_from_codes();
@@ -246,6 +247,10 @@ pub struct WxEntryLayer {
     pub heat_index: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub apparent_temp: Option<f32>,
+        
+    // only include if given air is below the lcl
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theta_e: Option<f32>,
 }
 
 // #[derive(Clone, Serialize, Deserialize)]
@@ -273,6 +278,7 @@ impl WxEntryLayer {
             wind_chill: None,
             heat_index: None,
             apparent_temp: None,
+            theta_e: None,
         }
     }
 
@@ -423,13 +429,32 @@ impl WxEntryLayer {
         }
     }
 
-    pub fn fill_in_calculated_values(&mut self, latitude: f32) {
+    pub fn theta_e(&self, altimeter: Option<f32>, altitude: Option<f32>) -> Option<f32> {
+        if let (Some(temp_f), Some(dewp_f)) = (self.temperature, self.dewpoint) {
+            
+            let pressure;
+            if let Some(p) = self.pressure {
+                pressure = p;
+            } else if let Some(alt_pres) =  altimeter {
+                pressure = formulae::altimeter_to_station(alt_pres, altitude?)
+            } else {
+                return None
+            }
+
+            return Some(formulae::theta_e(f_to_k(temp_f), f_to_k(dewp_f), pressure));
+        }
+
+        return None;
+    }
+
+    pub fn fill_in_calculated_values(&mut self, latitude: f32, altimeter: Option<f32>) {
         // self.wind = self.wind();
         self.relative_humidity = self.relative_humidity();
         self.slp = self.slp(latitude);
         self.wind_chill = self.wind_chill();
         self.heat_index = self.heat_index();
         self.apparent_temp = self.apparent_temp();
+        self.theta_e = self.theta_e( altimeter, self.height_msl);
     }
 
 }

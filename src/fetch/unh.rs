@@ -112,6 +112,7 @@ impl UNHWxEntry {
             wind_chill: None,
             heat_index: None,
             apparent_temp: None,
+            theta_e: None,
         });
     
         let mut entry = WxEntry { 

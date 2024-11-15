@@ -52,6 +52,7 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
         wind_chill: None,
         heat_index: None,
         apparent_temp: None,
+        theta_e: None,
     };
 
     let sea_level = WxEntryLayer { 
@@ -70,6 +71,7 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
         wind_chill: None,
         heat_index: None,
         apparent_temp: None,
+        theta_e: None,
     };
 
     let mut layers = HashMap::new();

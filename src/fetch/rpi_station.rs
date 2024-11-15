@@ -72,6 +72,7 @@ fn try_parse_entry(record: Result<RawStationEntry, csv::Error>, altitude: f32, s
         wind_chill: None,
         heat_index: None,
         apparent_temp: None,
+        theta_e: None,
     };
 
     let near_surface = WxEntryLayer {
@@ -90,6 +91,7 @@ fn try_parse_entry(record: Result<RawStationEntry, csv::Error>, altitude: f32, s
         wind_chill: None,
         heat_index: None,
         apparent_temp: None,
+        theta_e: None,
     };
 
     let mut layers = HashMap::new();

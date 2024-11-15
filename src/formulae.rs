@@ -109,3 +109,38 @@ pub fn altimeter_to_slp(altimeter: f32, height: f32, temperature: f32) -> f32 {
     let station_pres = altimeter_to_station(altimeter, height) as f32;
     station_pres*((height/h).exp())
 }
+
+pub fn vapor_pressure(temperature_kelvin: f32) -> f32 {
+    // source: https://atoc.colorado.edu/~cassano/wx_calculator/formulas/vaporPressure.html
+    let t_c = k_to_c(temperature_kelvin);
+    return 6.11*10.0_f32.powf(7.5*t_c / (237.7 + t_c))
+}
+
+
+pub fn mixing_ratio_g_kg(temperature_kelvin: f32, station_pressure: f32) -> f32 {
+    // source: https://www.weather.gov/media/epz/wxcalc/mixingRatio.pdf
+    let vapor_pressure = vapor_pressure(temperature_kelvin);
+    return 621.97 * (vapor_pressure / (station_pressure - vapor_pressure));
+}
+
+// an approximation
+pub fn lcl_temperature(temperature_kelvin_below_lcl: f32, dewpoint_kelvin: f32) -> f32 {
+    return 1.0/((1.0/(dewpoint_kelvin-56.0)) + ((temperature_kelvin_below_lcl/dewpoint_kelvin).ln()/800.0)) + 56.0;
+}
+
+
+
+// an approximation
+pub fn theta_e(temperature_kelvin_below_lcl: f32, dewpoint_kelvin: f32, station_pressure: f32) -> f32 {
+    const p_0: f32 = 1000.0;
+    // source: https://en.wikipedia.org/wiki/Equivalent_potential_temperature
+    let vap_pres = vapor_pressure(dewpoint_kelvin);
+    let t_l: f32 = lcl_temperature(temperature_kelvin_below_lcl, dewpoint_kelvin); // temperature at LCL
+    let r: f32 = mixing_ratio_g_kg(dewpoint_kelvin, station_pressure) / 1000.0; // mixing ratio in kg/kg
+    let theta_l: f32 = temperature_kelvin_below_lcl * 
+                        ((p_0/(station_pressure - vap_pres)).powf(0.2854)) *
+                        ((temperature_kelvin_below_lcl/t_l).powf(0.28*r)); // dry potential temperature at LCL
+    let theta_e = theta_l * (((3036.0/t_l) - 1.78) * r * (1.0 + (0.448*r))).exp();
+
+    return theta_e
+}
