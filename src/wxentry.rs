@@ -18,40 +18,6 @@ pub struct Station {
 
 
 
-
-// WXENTRY
-
-// #[derive(Clone, Serialize)]
-// pub struct WxEntryB {
-//     pub date_time: DateTime<Utc>,
-//     pub station: Station,
-    
-//     pub layers: HashMap<Layer, f32>,
-
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub cape: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub skycover: Option<SkyCoverage>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub wx_codes: Option<Vec<String>>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub wx: Option<Wx>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub raw_metar: Option<String>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub precip_today: Option<Precip>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub precip: Option<Precip>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub precip_probability: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub altimeter: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub best_slp: Option<f32>,
-// }
-
-
-
 pub trait WxEntry<L: WxEntryLayer> where 
     Self: Sized {
 
@@ -120,120 +86,9 @@ pub trait WxEntry<L: WxEntryLayer> where
         let surface = self.layers().get(&NearSurface)?;
         Some(formulae::altimeter_to_slp(self.altimeter()?, self.station().altitude, surface.temperature()?))
     }
-
-    // fn fill_in_calculated_values(&mut self) {
-    //     let lat = self.latitude();
-    //     let alt = self.altimeter;
-    //     for e in self.layers.iter_mut() {
-    //         e.1.fill_in_calculated_values(lat, alt);
-    //     }
-
-    //     self.wx_from_codes();
-    //     self.best_slp = self.best_slp();
-    // }
 }
 
-// impl<L> fmt::Debug for WxEntry<L> {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 
-//         let mut parameters: Vec<String> = vec![];
-
-//         parameters.push(self.date_time.to_string());
-//         parameters.push(format!("{:?}", self.station));
-
-//         if let Some(s) = &self.cape {
-//             parameters.push(format!("CAPE: {s:.0}"))
-//         }
-
-//         if let Some(s) = &self.skycover {
-//             parameters.push(s.to_string())
-//         }
-
-//         if let Some(s) = &self.precip_probability {
-//             parameters.push(format!("Precip Prob: {}", s.to_string()))
-//         }
-
-//         if let Some(s) = &self.precip_today {
-//             parameters.push(s.to_string())
-//         }
-
-//         if let Some(s) = &self.precip {
-//             parameters.push(s.to_string())
-//         }
-
-//         if let Some(x) = &self.raw_metar {
-//             parameters.push(format!("METAR: {}", x)); 
-//         }
-
-
-
-//         if let Some(x) = &self.wx_codes {
-//             let mut s: String = String::new();
-            
-//             if x.is_empty() {
-//                 s += "Wx Codes: none";
-//             } else {
-//                 s += "Wx Codes:";
-
-//                 for a in x {
-//                     parameters.push(a.clone()); 
-//                 }
-//             }
-//         }
-
-//         let layer_string = self.layers
-//                             .iter()
-//                             .map(|(_, x)| x.to_string())
-//                             .collect::<Vec<String>>()
-//                             .join(", ");
-
-//         write!(f, "{}, {}", parameters.join(", "), layer_string)
-
-
-//     }
-// }
-
-
-
-// WXENTRYLAYER
-
-// #[derive(Clone, Copy, Serialize, Deserialize)]
-// pub struct WxEntryLayerB {
-//     pub layer: Layer,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub height_agl: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub height_msl: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub temperature: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub dewpoint: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub pressure: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub wind_direction: Option<Direction>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub wind_speed: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub visibility: Option<f32>,
-
-//     // #[serde(skip_serializing_if = "Option::is_none")]
-//     // pub wind: Option<Wind>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub relative_humidity: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub slp: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub wind_chill: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub heat_index: Option<f32>,
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub apparent_temp: Option<f32>,
-        
-//     // only include if given air is below the lcl
-//     #[serde(skip_serializing_if = "Option::is_none")]
-//     pub theta_e: Option<f32>,
-// }
 
 pub trait WxEntryLayer {
     fn layer(&self) -> Layer;
@@ -401,53 +256,6 @@ pub trait WxEntryLayer {
 }
 
 
-
-// impl fmt::Display for WxEntryLayer {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         let mut parameters: Vec<String> = vec![];
-
-//         // parameters.push(format!("{}", self.date_time.format("%c"))); 
-
-//         parameters.push(format!("Level: {}", self.layer)); 
-
-//         if let Some(x) = self.height_agl {
-//             parameters.push(format!("Height AGL: {:.0}", x));
-//         }
-
-//         if let Some(x) = self.height_msl {
-//             parameters.push(format!("Height MSL: {:.0}", x));
-//         }
-
-//         if let Some(x) = self.temperature {
-//             parameters.push(format!("Temp: {:3.1}", x)); 
-//         }
-
-//         if let Some(x) = self.dewpoint {
-//             parameters.push(format!("Dew: {:3.1}", x)); 
-//         }
-
-//         if let Some(x) = self.pressure {
-//             parameters.push(format!("Pres: {:4.1}", x)); 
-//         }
-
-//         if let Some(w) = self.wind_speed {
-//             parameters.push(format!("Wind Speed: {}", w)); 
-//         }
-
-//         if let Some(w) = self.wind_direction {
-//             parameters.push(format!("Wind Direction: {}", w)); 
-//         }
-
-//         if let Some(x) = self.visibility {
-//             parameters.push(format!("Vis: {:3.1}", x)); 
-//         }
-
-
-//         let full_string = parameters.join(", ");
-
-//         write!(f, "{}", full_string)
-//     }
-// }
 
 // LAYER
 
