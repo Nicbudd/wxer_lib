@@ -1,12 +1,6 @@
-use std::fmt;
-
 // PUBLIC UNIT TRAIT -----------------------------------------------------------
 
-// #[allow(private_bounds)]
-pub trait Unit<T> where 
-    Self: Clone + Copy + Sized,
-    T: Clone + Copy + PartialEq + Eq + fmt::Display + fmt::Debug {
-
+pub trait Unit<T: UnitsType>: where Self: Clone + Copy + Sized + fmt::Display {
     fn new(value: f32, unit: T) -> Self;
     // don't want users accidentally accessing the value without checking the unit
     fn unit(&self) -> T;
@@ -16,50 +10,57 @@ pub trait Unit<T> where
 } 
 
 
+use core::fmt;
+
 pub use hidden::*;
 
 mod hidden {
-    use strum_macros::Display;
     use std::fmt;
+    use std::ops::{Add, Div, Mul, Sub};
+    use serde::{ser::SerializeStruct, Serialize};
+    use strum_macros::Display;
+    use anyhow::{Result, bail};
     use super::*;
 
     // INTERNAL USE UNIT TRAITS  -----------------------------------------------
 
-    trait UnitInternal<T> where 
-        Self: Clone + Copy + Sized,
-        T: Clone + Copy + PartialEq + fmt::Display + fmt::Debug {
+    trait UnitInternal<T: UnitsType> where Self: Clone + Copy + Sized + fmt::Display {
 
         fn new(value: f32, unit: T) -> Self;
         fn value(&self) -> f32;
         fn unit(&self) -> T;
-        fn convert(&self, unit: T) -> Self;
+        fn convert(&self, unit: T) -> Self {
+            if self.unit() == unit { // avoid conversions if the units are the same
+                return self.clone()
+            } else {
+                return Self::convert(&self, unit);
+            }
+        }
 
         fn string_with_unit(&self) -> String {
             format!("{:.1} {}", self.value(), UnitInternal::unit(self))
         }
         fn value_in(&self, unit: T) -> f32 { // get the value of a unit in some other unit
-            let a = self.clone();
-            UnitInternal::convert(&a, unit).value()
+            UnitInternal::convert(self, unit).value()
         }
     }
+
+    pub trait UnitsType: Clone + Copy + PartialEq + Eq + fmt::Display + fmt::Debug + Serialize {}
 
     // PROPORTIONAL UNIT STRUCT ------------------------------------------------
     // helpful for building most units (where the conversion between units are proportional)
 
     #[derive(Clone, Copy, Debug)]
-    pub struct ProportionalUnit<T> 
-        where T: Proportional + Clone + Copy + fmt::Display + fmt::Debug {
+    pub struct ProportionalUnit<T: Proportional> {
         value: f32,
         unit: T,
     }
-    pub trait Proportional {
+    pub trait Proportional: UnitsType {
         fn coefficient(&self) -> f32; // the coefficient that when multiplied by
                            // the value would convert this unit into the 
                            // "default" unit.
     }
-    impl<T> UnitInternal<T> for ProportionalUnit<T> where 
-        T: Proportional + Clone + Copy + PartialEq + Eq + fmt::Display + fmt::Debug {
-        
+    impl<T: Proportional> UnitInternal<T> for ProportionalUnit<T> {
         fn new(value: f32, unit: T) -> Self {
             Self {value, unit}
         }
@@ -79,12 +80,18 @@ mod hidden {
         }
     }
 
+    impl<T: Proportional> fmt::Display for ProportionalUnit<T> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", Unit::string_with_unit(self))
+        }
+    }
+
     // UNITS -------------------------------------------------------------------
 
     // WIND ----------------------------------------------------------------
     pub type Speed = ProportionalUnit<SpeedUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
     #[allow(unused)]
     pub enum SpeedUnit {
         #[strum(to_string = "mph")]
@@ -98,6 +105,7 @@ mod hidden {
     }
     pub use SpeedUnit::*;
 
+    impl UnitsType for SpeedUnit {}
     impl Proportional for SpeedUnit {
         fn coefficient(&self) -> f32 {
             match self {
@@ -112,12 +120,12 @@ mod hidden {
     // PRESSURE ----------------------------------------------------------------
     pub type Pressure = ProportionalUnit<PressureUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
     #[allow(unused)]
     pub enum PressureUnit {
         #[strum(to_string = "hPa")]
         HPa, 
-        #[strum(to_string = "mbar")]
+        #[strum(to_string = "mb")]
         Mbar, 
         #[strum(to_string = "inHg")]
         InHg,
@@ -128,6 +136,7 @@ mod hidden {
     }
     pub use PressureUnit::*;
 
+    impl UnitsType for PressureUnit {}
     impl Proportional for PressureUnit {
         fn coefficient(&self) -> f32 {
             match self {
@@ -140,16 +149,131 @@ mod hidden {
         }
     }
 
+    // SPECIFIC ENERGY ---------------------------------------------------------
+    pub type SpecEnergy = ProportionalUnit<SpecEnergyUnit>;
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[allow(unused)]
+    pub enum SpecEnergyUnit {
+        #[strum(to_string = "J/kg")]
+        Jkg, 
+        #[strum(to_string = "m^2/s^2")]
+        M2s2, 
+    }
+    pub use SpecEnergyUnit::*;
+
+    impl UnitsType for SpecEnergyUnit {}
+    impl Proportional for SpecEnergyUnit {
+        fn coefficient(&self) -> f32 {
+            match self {
+                Jkg => 1.,
+                M2s2 => 1.,
+            }
+        }
+    }
+
+    // DISTANCE ----------------------------------------------------------------
+    pub type Distance = ProportionalUnit<DistanceUnit>;
+    pub type Altitude = ProportionalUnit<DistanceUnit>;
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[allow(unused)]
+    pub enum DistanceUnit {
+        #[strum(to_string = "m")]
+        Meter, 
+        #[strum(to_string = "km")]
+        Kilometer, 
+        #[strum(to_string = "ft")]
+        Feet, 
+        #[strum(to_string = "mi")]
+        Mile, 
+        #[strum(to_string = "nmi")]
+        NauticalMile, 
+    }
+    pub use DistanceUnit::*;
+
+    impl UnitsType for DistanceUnit {}
+    impl Proportional for DistanceUnit {
+        fn coefficient(&self) -> f32 {
+            match self {
+                Meter => 1.,
+                Kilometer => 1000.,
+                Feet => 0.3048,
+                Mile => 1609.344,
+                NauticalMile => 1852.,
+            }
+        }
+    }
+
+    // PRECIP AMOUNT -----------------------------------------------------------
+    pub type PrecipAmount = ProportionalUnit<PrecipUnit>;
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[allow(unused)]
+    pub enum PrecipUnit {
+        #[strum(to_string = "mm")]
+        Mm, 
+        #[strum(to_string = "in")]
+        Inch, 
+        #[strum(to_string = "in")]
+        Cm, 
+    }
+    pub use PrecipUnit::*;
+
+    impl UnitsType for PrecipUnit {}
+    impl Proportional for PrecipUnit {
+        fn coefficient(&self) -> f32 {
+            match self {
+                Mm => 1.,
+                Inch => 25.4,
+                Cm => 2.54,
+            }
+        }
+    }
+
+    // PERCENTAGE -----------------------------------------------------------
+    pub type Fractional = ProportionalUnit<FractionalUnit>;
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[allow(unused)]
+    pub enum FractionalUnit {
+        #[strum(to_string = "%")]
+        Percent, 
+        #[strum(to_string = "")]
+        Decimal, 
+        #[strum(to_string = "1/1000")]
+        Milli, 
+    }
+    pub use FractionalUnit::*;
+
+    impl UnitsType for FractionalUnit {}
+    impl Proportional for FractionalUnit {
+        fn coefficient(&self) -> f32 {
+            match self {
+                Percent => 0.01,
+                Decimal => 1.,
+                Milli => 0.001,
+            }
+        }
+    }
+
     // TEMPERATURE -------------------------------------------------------------
     // Not a proportional unit
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug)]
     pub struct Temperature {
         value: f32,
         unit: TemperatureUnit
     }
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display)]
+    // this is stupid
+    impl fmt::Display for Temperature {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", Unit::string_with_unit(self))
+        }
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
     #[allow(unused)]
     pub enum TemperatureUnit {
         #[strum(to_string = "°K")]
@@ -161,6 +285,7 @@ mod hidden {
     }
     pub use TemperatureUnit::*;
 
+    impl UnitsType for TemperatureUnit {}
     impl UnitInternal<TemperatureUnit> for Temperature {
         fn new(value: f32, unit: TemperatureUnit) -> Self {
             Self {value, unit}
@@ -186,13 +311,62 @@ mod hidden {
         }
     }
 
+    // DIRECTION ---------------------------------------------------------------
+    // does not use the standard unit trait
 
+    #[derive(Clone, Copy, Serialize, derive_more::Display)]
+    pub struct Direction(u16); 
+
+    impl Direction {
+        fn sanitize_degrees(degrees: u16) -> Result<u16> {
+            let degrees = if degrees > 360 {
+                bail!("Degrees provided ({degrees}) were not under 360.");
+            } else if degrees % 10 != 0 {
+                ((degrees + 5) / 10) * 10 // round to nearest 10
+            } else {
+                degrees
+            };
+
+            Ok(degrees % 360)
+        }
+
+        pub fn from_degrees(degrees: u16) -> Result<Direction> {
+            let corrected_degrees = Direction::sanitize_degrees(degrees)?;
+            Ok(Direction(corrected_degrees))
+        }
+
+        pub fn cardinal(&self) -> &'static str {
+            match self.0 {
+                350 | 0 | 10 => "N",
+                20 | 30 => "NNE",
+                40 | 50 => "NE",
+                60 | 70 => "ENE",
+                80 | 90 | 100 => "E",
+                110 | 120 => "ESE",
+                130 | 140 => "SE",
+                150 | 160 => "SSE",
+                170 | 180 | 190 => "S",
+                200 | 210 => "SSW",
+                220 | 230 => "SW",
+                240 | 250 => "WSW",
+                260 | 270 | 280 => "W",
+                290 | 300 => "WNW",
+                310 | 320 => "NW",            
+                330 | 340 => "NNW",
+                _ => unreachable!("Direction struct contained {}, which is invalid.", self.0)
+            }
+        }
+
+        pub fn degrees(&self) -> u16 {
+            self.0
+        } 
+    }
+
+    
     // UNIT TRAIT IMPLEMENTATIONS ----------------------------------------------
     // (boring paperwork to connect the above traits together)
 
-    impl<T, U: UnitInternal<T>> Unit<T> for U where     
-        Self: Clone + Copy + Sized,
-        T: Clone + Copy + PartialEq + Eq +fmt::Display + fmt::Debug {
+    impl<T: UnitsType, U: UnitInternal<T>> Unit<T> for U where Self: Clone + Copy + Sized {
         // fn value(&self) -> f32 {U::value(&self)}
         fn new(value: f32, unit: T) -> Self {U::new(value, unit)}
         fn unit(&self) -> T {U::unit(&self)}
@@ -200,7 +374,67 @@ mod hidden {
         fn string_with_unit(&self) -> String {U::string_with_unit(&self)}
         fn value_in(&self, unit: T) -> f32 {U::value_in(&self, unit)}
     }
+
+    impl<T: Proportional> Add for ProportionalUnit<T> {
+        type Output = Self;
+        fn add(self, rhs: Self) -> Self {
+            let unit = self.unit;
+            let other = Unit::convert(&rhs, unit);
+            let value = other.value + self.value;
+            Self { value, unit }
+        }
+    }
+
+    impl<T: Proportional> Sub for ProportionalUnit<T> {
+        type Output = Self;
+        fn sub(self, rhs: Self) -> Self::Output {
+            let unit = self.unit;
+            let other = Unit::convert(&rhs, unit);
+            let value = other.value - self.value;
+            Self { value, unit }
+        }
+    }
+
+    impl<T: Proportional> Mul<f32> for ProportionalUnit<T> {
+        type Output = Self;
+        fn mul(self, rhs: f32) -> Self {
+            Self { value: self.value*rhs, unit: self.unit }
+        }
+    }
+
+    impl<T: Proportional> Div<f32> for ProportionalUnit<T> {
+        type Output = Self;
+        fn div(self, rhs: f32) -> Self {
+            Self { value: self.value/rhs, unit: self.unit }
+        }
+    }
+
+    impl<T: Proportional> PartialEq for ProportionalUnit<T> {
+        fn eq(&self, other: &Self) -> bool {
+            let other = UnitInternal::convert(other, self.unit);
+            self.value == other.value
+        }
+    }
+
+    impl PartialEq for Temperature {
+        fn eq(&self, other: &Self) -> bool {
+            let other = UnitInternal::convert(other, self.unit);
+            self.value == other.value
+        }
+    }
+
+    impl<T: Proportional> Serialize for ProportionalUnit<T> {
+        fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> where S: serde::Serializer {
+            let mut state = serializer.serialize_struct("Unit", 2)?;
+            state.serialize_field("value", &self.value)?;
+            state.serialize_field("unit", &self.unit)?;
+            state.end()
+        }
+    }
 }
+
+
+
 
 // TESTS -----------------------------------------------------------------------
 
