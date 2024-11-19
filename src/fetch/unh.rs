@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{db::StationData, rh_to_dewpoint, Direction, Layer, Precip, Station, WxEntry, WxEntryLayer};
+use crate::units::*; 
+use crate::*;
+use crate::db::StationData;
 
 use chrono::{offset::LocalResult, DateTime, Datelike, Local, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::US::Eastern;
@@ -22,10 +24,10 @@ pub async fn import(date: DateTime<Utc>) -> Result<StationData> {
     let mut db = BTreeMap::new();
 
     for entry_result in rdr.deserialize() {
-        let entry: UNHWxEntry = entry_result?;
-        let wx_entry: WxEntry = entry.to_wx_entry();
+        let entry: UNHData = entry_result?;
+        entry.layers.insert(Layer::NearSurface, &entry);
 
-        db.insert(wx_entry.date_time, wx_entry);
+        db.insert(entry.date_time(), entry);
     }
 
     Ok(db)
@@ -53,7 +55,7 @@ fn deserialize_unh_dt<'de, D>(des: D) -> Result<DateTime<Utc>, D::Error>
     Ok(dt_utc)
 }
 #[derive(Debug, Deserialize)]
-struct UNHWxEntry {
+struct UNHData<'a> {
     #[serde(rename="Datetime")]
     #[serde(deserialize_with="deserialize_unh_dt")]
     dt: DateTime<Utc>,
@@ -84,61 +86,51 @@ struct UNHWxEntry {
 
     #[serde(rename="WindDir_D1_WVT")]
     wind_dir: f32,
+
+    #[serde(skip_deserializing)]
+    layers: HashMap<Layer, &'a UNHData<'a>>,
 }
 
-impl UNHWxEntry {
-    fn to_wx_entry(self) -> WxEntry {
-        let unh_station = Station {
+impl<'a> WxEntry<&'a UNHData<'a>> for UNHData<'a> {
+    fn date_time(&self) -> DateTime<Utc> {self.dt}
+    fn station(&self) -> Station {
+        Station {
             name: "UNH".into(),
-            altitude: 28.0, //meters
+            altitude: Altitude::new(28.0, Meter), //meters
             coords: (43.1348, -70.9358)
-        };
+        }
+    }
+    fn layers(&self) -> &HashMap<Layer, &'a UNHData<'a>> {&self.layers}
 
-        let mut layers = HashMap::new();
+    fn precip_today(&self) -> Option<Precip> {
+        Some(Precip { 
+            unknown: PrecipAmount::new(0., Inch), 
+            rain: PrecipAmount::new(self.rain, Inch), 
+            snow: PrecipAmount::new(0., Inch) 
+        })
+    }
+} 
 
-        layers.insert(Layer::NearSurface, WxEntryLayer { 
-            layer: Layer::NearSurface, 
-            height_agl: Some(6.0), 
-            height_msl: Some(28.0), 
-            temperature: Some(self.temperature_2m), 
-            dewpoint: Some(rh_to_dewpoint(self.temperature_2m, self.relative_humidity)), 
-            pressure: None, 
-            wind_direction: Direction::from_degrees(self.wind_dir as u16).ok(), 
-            wind_speed: Some(self.wind_speed), 
-            visibility: None,
+impl<'a> WxEntryLayer for &'a UNHData<'a> {
+    fn layer(&self) -> Layer {Layer::NearSurface}
+    fn station(&self) -> Station {
+        Station {
+            name: "UNH".into(),
+            altitude: Altitude::new(28.0, Meter), //meters
+            coords: (43.1348, -70.9358)
+        }
+    }
 
-            relative_humidity: None,
-            slp: None,
-            wind_chill: None,
-            heat_index: None,
-            apparent_temp: None,
-            theta_e: None,
-        });
-    
-        let mut entry = WxEntry { 
-            date_time: self.dt, 
-            station: unh_station, 
-            layers, 
-            cape: None, 
-            skycover: None, 
-            wx_codes: None, 
-            raw_metar: None, 
-            precip_today: None, 
-            precip: Some(Precip {
-                rain: self.rain,
-                snow: 0.,
-                unknown: 0.,
-            }), 
-            precip_probability: None,
-            altimeter: None,
-            
-            wx: None,
-            best_slp: None,
-        };
-
-        entry.fill_in_calculated_values();
-
-        return entry
-
+    fn temperature(&self) -> Option<Temperature> {
+        Some(Temperature::new(self.temperature_2m, Fahrenheit))
+    }
+    fn relative_humidity(&self) -> Option<Fractional> {
+        Some(Fractional::new(self.relative_humidity, Percent))
+    } 
+    fn wind(&self) -> Option<Wind> {
+        Some(Wind {
+            direction: Direction::from_degrees(self.wind_dir as u16).ok()?,
+            speed: Speed::new(self.wind_speed, Mph)
+        })
     }
 }

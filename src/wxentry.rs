@@ -18,8 +18,7 @@ pub struct Station {
 
 
 
-pub trait WxEntry<L: WxEntryLayer> where 
-    Self: Sized {
+pub trait WxEntry<L: WxEntryLayer> where Self: Sized {
 
     // REQUIRED FIELDS ---------------------------------------------------------
     fn date_time(&self) -> DateTime<Utc>;
@@ -92,22 +91,24 @@ pub trait WxEntry<L: WxEntryLayer> where
 
 pub trait WxEntryLayer {
     fn layer(&self) -> Layer;
-    fn station(&self) -> &Station;
+    fn station(&self) -> Station;
 
 
     // OPTIONAL FIELDS ---------------------------------------------------------
 
     fn temperature(&self) -> Option<Temperature> {None}
     fn pressure(&self) -> Option<Pressure> {None}
-    fn wind_speed(&self) -> Option<Speed> {None}
-    fn wind_direction(&self) -> Option<Direction> {None}
     fn visibility(&self) -> Option<Distance> {None}
 
-
     // QUASI-CALCULATED FIELDS -------------------------------------------------
-    // one of these are recommended to be "implemented" (overwritten)
+    // completing one of these fields will complete the others
+
     fn dewpoint(&self) -> Option<Temperature> {self.dewpoint_from_rh()}
     fn relative_humidity(&self) -> Option<Fractional> {self.rh_from_dewpoint()}
+
+    fn wind_speed(&self) -> Option<Speed> {self.wind_speed_from_wind()}
+    fn wind_direction(&self) -> Option<Direction> {self.wind_direction_from_wind()}
+    fn wind(&self) -> Option<Wind> {self.wind_from_speed_and_direction()}
 
 
     // CALCULATED FIELDS -------------------------------------------------------
@@ -118,10 +119,6 @@ pub trait WxEntryLayer {
 
     fn height_msl(&self) -> Altitude {
         self.height_agl() + self.station().altitude
-    }
-
-    fn wind(&self) -> Option<Wind> {
-        Some(Wind {direction: self.wind_direction()?, speed: self.wind_speed()?})
     }
 
     fn slp(&self, latitude: f32) -> Option<Pressure> {
@@ -239,12 +236,11 @@ pub trait WxEntryLayer {
 
 
 
-    // FOR USE BY IMPLEMENTORS -------------------------------------------------
+    // QUASI-CALCULATED IMPLEMENTATIONS ----------------------------------------
 
     fn dewpoint_from_rh(&self) -> Option<Temperature> {
         Some(formulae::rh_to_dewpoint(self.temperature()?, self.relative_humidity()?))
     }
-
 
     fn rh_from_dewpoint(&self) -> Option<Fractional> { // in percentage
         let t = self.temperature()?.value_in(Celsius);
@@ -253,13 +249,25 @@ pub trait WxEntryLayer {
         let bottom_term = ((17.625 * t)/(243.03 + t)).exp();
         Some(Fractional::new(top_term / bottom_term, Decimal))
     }
+
+    fn wind_from_speed_and_direction(&self) -> Option<Wind> {
+        Some(Wind {direction: self.wind_direction()?, speed: self.wind_speed()?})
+    }
+
+    fn wind_speed_from_wind(&self) -> Option<Speed> {
+        Some(self.wind()?.speed)
+    }
+
+    fn wind_direction_from_wind(&self) -> Option<Direction> {
+        Some(self.wind()?.direction)
+    }
 }
 
 
 
 // LAYER
 
-#[derive(Clone, Copy, Serialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 pub enum Layer {
     Indoor,
     NearSurface,
@@ -391,9 +399,9 @@ impl fmt::Display for SkyCoverage {
 
 #[derive(Clone, Copy, Serialize)]
 pub struct Precip {
-    pub unknown: f32,
-    pub rain: f32,
-    pub snow: f32,
+    pub unknown: PrecipAmount,
+    pub rain: PrecipAmount,
+    pub snow: PrecipAmount,
 }
 
 impl Display for Precip {
@@ -555,6 +563,42 @@ impl Intensity {
 }
 
 
+// BASIC WXENTRY IMPLEMENTATION ------------------------------------------------
+
+struct BasicWxEntry {
+    date_time: DateTime<Utc>,
+    station: Station,
+    layers: HashMap<Layer, BasicWxEntryLayer>
+}
+
+impl WxEntry<BasicWxEntryLayer> for BasicWxEntry {
+    fn date_time(&self) -> DateTime<Utc> {self.date_time}
+    fn station(&self) -> Station {self.station.clone()}
+    fn layers(&self) -> &HashMap<Layer, BasicWxEntryLayer> {&self.layers}
+}
+
+struct BasicWxEntryLayer {
+    layer: Layer,
+    station: Station,
+    temperature: Option<Temperature>,
+    pressure: Option<Pressure>,
+    wind: Option<Wind>,
+    visibility: Option<Distance>,
+    dewpoint: Option<Temperature>,
+}
+
+impl WxEntryLayer for BasicWxEntryLayer {
+    fn layer(&self) -> Layer {self.layer}
+    fn station(&self) -> Station {self.station.clone()}
+    fn temperature(&self) -> Option<Temperature> {self.temperature}
+    fn pressure(&self) -> Option<Pressure> {self.pressure}
+    fn visibility(&self) -> Option<Distance> {self.visibility}
+    fn dewpoint(&self) -> Option<Temperature> {self.dewpoint}
+    fn wind(&self) -> Option<Wind> {self.wind}
+}
+
+//
+
 
 #[cfg(test)]
 mod tests {
@@ -572,7 +616,7 @@ mod tests {
 
     impl WxEntryLayer for TestLayer {
         fn layer(&self) -> Layer {self.layer}
-        fn station(&self) -> &Station {&self.station}
+        fn station(&self) -> Station {self.station.clone()}
     }
 
     fn default_station() -> Station {
