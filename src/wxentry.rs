@@ -1,4 +1,4 @@
-use std::{collections::HashMap, f32::consts::PI, fmt::{self, Display}};
+use std::{any::Any, collections::HashMap, f32::consts::PI, fmt::{self, Display}, hash::Hash};
 use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
 use regex::Regex;
@@ -18,22 +18,22 @@ pub struct Station {
 
 
 
-pub trait WxEntry<L: WxEntryLayer> where Self: Sized {
+pub trait WxEntry<'a, L: WxEntryLayer + 'a> where Self: Sized {
 
     // REQUIRED FIELDS ---------------------------------------------------------
     fn date_time(&self) -> DateTime<Utc>;
     fn station(&self) -> Station;
-    fn layers(&self) -> &HashMap<Layer, L>;
+    fn layer(&'a self, layer: Layer) -> Option<L>;
     // fn new(station: &Station) -> Self;
 
     // OPTIONAL FIELDS ---------------------------------------------------------
-    fn cape(&self) -> Option<SpecEnergy> {None} 
     fn skycover(&self) -> Option<SkyCoverage> {None}
     fn wx_codes(&self) -> Option<Vec<String>> {None}
     fn raw_metar(&self) -> Option<String> {None}
     fn precip_today(&self) -> Option<Precip> {None}
     fn precip(&self) -> Option<Precip> {None}
     fn altimeter(&self) -> Option<Pressure> {None}
+    fn cape(&self) -> Option<SpecEnergy> {None} 
 
     // CALCULATED FIELDS -------------------------------------------------------
 
@@ -50,10 +50,10 @@ pub trait WxEntry<L: WxEntryLayer> where Self: Sized {
         return self.station().coords.0;
     }
 
-    fn best_slp(&self) -> Option<Pressure> {
-        let option_1 = {self.layers().get(&SeaLevel).map(|x| x.pressure()).flatten()};
-        let option_2 = {self.layers().get(&NearSurface).map(|x| x.slp(self.latitude())).flatten()};
-        let option_3 = {self.layers().get(&Indoor).map(|x| x.slp(self.latitude())).flatten()};
+    fn best_slp(&'a self) -> Option<Pressure> {
+        let option_1 = {self.layer(SeaLevel).map(|x| x.pressure()).flatten()};
+        let option_2 = {self.layer(NearSurface).map(|x| x.slp(self.latitude())).flatten()};
+        let option_3 = {self.layer(Indoor).map(|x| x.slp(self.latitude())).flatten()};
         let option_4 = {self.mslp_from_altimeter()};
 
         option_1.or(option_2).or(option_3).or(option_4)
@@ -62,16 +62,16 @@ pub trait WxEntry<L: WxEntryLayer> where Self: Sized {
 
     // ACCESSOR FIELDS ---------------------------------------------------------
 
-    fn sealevel(&self) -> Option<&L> {
-        self.layers().get(&SeaLevel)
+    fn sealevel(&'a self) -> Option<L> {
+        self.layer(SeaLevel)
     }
 
-    fn surface(&self) -> Option<&L> {
-        self.layers().get(&NearSurface)
+    fn surface(&'a self) -> Option<L> {
+        self.layer(NearSurface)
     }
 
-    fn indoor(&self) -> Option<&L> {
-        self.layers().get(&Indoor)
+    fn indoor(&'a self) -> Option<L> {
+        self.layer(Indoor)
     }
 
 
@@ -81,8 +81,8 @@ pub trait WxEntry<L: WxEntryLayer> where Self: Sized {
         Some(formulae::altimeter_to_station(self.altimeter()?, self.station().altitude))
     }
 
-    fn mslp_from_altimeter(&self) -> Option<Pressure> {
-        let surface = self.layers().get(&NearSurface)?;
+    fn mslp_from_altimeter(&'a self) -> Option<Pressure> {
+        let surface = self.layer(NearSurface)?;
         Some(formulae::altimeter_to_slp(self.altimeter()?, self.station().altitude, surface.temperature()?))
     }
 }
@@ -104,7 +104,7 @@ pub trait WxEntryLayer {
     // completing one of these fields will complete the others
 
     fn dewpoint(&self) -> Option<Temperature> {self.dewpoint_from_rh()}
-    fn relative_humidity(&self) -> Option<Fractional> {self.rh_from_dewpoint()}
+    fn relative_humidity(&self) -> Option<Fraction> {self.rh_from_dewpoint()}
 
     fn wind_speed(&self) -> Option<Speed> {self.wind_speed_from_wind()}
     fn wind_direction(&self) -> Option<Direction> {self.wind_direction_from_wind()}
@@ -242,12 +242,12 @@ pub trait WxEntryLayer {
         Some(formulae::rh_to_dewpoint(self.temperature()?, self.relative_humidity()?))
     }
 
-    fn rh_from_dewpoint(&self) -> Option<Fractional> { // in percentage
+    fn rh_from_dewpoint(&self) -> Option<Fraction> { // in percentage
         let t = self.temperature()?.value_in(Celsius);
         let td = self.dewpoint()?.value_in(Celsius);
         let top_term = ((17.625 * td)/(243.03 + td)).exp();
         let bottom_term = ((17.625 * t)/(243.03 + t)).exp();
-        Some(Fractional::new(top_term / bottom_term, Decimal))
+        Some(Fraction::new(top_term / bottom_term, Decimal))
     }
 
     fn wind_from_speed_and_direction(&self) -> Option<Wind> {
@@ -269,6 +269,7 @@ pub trait WxEntryLayer {
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 pub enum Layer {
+    All,
     Indoor,
     NearSurface,
     SeaLevel,
@@ -284,6 +285,7 @@ use Layer::*;
 impl Display for Layer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            All => write!(f, ""),
             Indoor => write!(f, "Indoor"),
             NearSurface => write!(f, "Near Surface"),
             SeaLevel => write!(f, "Sea Level"),
@@ -297,6 +299,7 @@ impl Display for Layer {
 impl Layer {
     fn height_agl(&self, station_altitude: Altitude) -> Altitude {
         let height = match self {
+            All => Altitude::new(f32::NAN, Meter),
             Indoor => Altitude::new(1., Meter),
             NearSurface => Altitude::new(2., Meter),
             SeaLevel => station_altitude*-1.,
@@ -562,22 +565,111 @@ impl Intensity {
     }
 }
 
+// HASHMAP BASED IMPLEMENTATION ------------------------------------------------
+pub struct HashMapWx {
+    date_time: DateTime<Utc>,
+    station: Station,
+    data: HashMap<(Layer, Param), Box<dyn Any>>
+}
+
+#[derive(Debug, Eq, Hash, PartialEq)]
+pub enum Param {
+    Temperature,
+    Pressure,
+    Visibility,
+    Dewpoint,
+    RelativeHumidity,
+    WindSpeed,
+    WindDirection,
+    Wind,
+    SkyCover,
+    WxCodes,
+    RawMetar,
+    PrecipToday,
+    Precip,
+    Altimeter,
+    Cape,
+}
+
+impl<'a> WxEntry<'a, LayerHash<'a>> for HashMapWx {
+    fn date_time(&self) -> DateTime<Utc> {self.date_time}
+    fn station(&self) -> Station {self.station.clone()}
+    fn layer(&'a self, layer: Layer) -> Option<LayerHash<'a>> {Some(LayerHash {layer, data: self})}
+
+    fn skycover(&self) -> Option<SkyCoverage> {self.get(All, Param::SkyCover)}
+    fn wx_codes(&self) -> Option<Vec<String>> {self.get(All, Param::WxCodes)}
+    fn raw_metar(&self) -> Option<String> {self.get(All, Param::RawMetar)}
+    fn precip_today(&self) -> Option<Precip> {self.get(All, Param::PrecipToday)}
+    fn precip(&self) -> Option<Precip> {self.get(All, Param::Precip)}
+    fn altimeter(&self) -> Option<Pressure> {self.get(All, Param::Altimeter)}
+    fn cape(&self) -> Option<SpecEnergy> {self.get(All, Param::Cape)} 
+}
+
+
+impl HashMapWx {
+    pub fn new(date_time: DateTime<Utc>, station: Station) -> HashMapWx {
+        HashMapWx { date_time, station, data: HashMap::new() }
+    }
+    pub fn put<U: Clone + 'static>(&mut self, layer: Layer, param: Param, data: U) {
+        self.data.insert((layer, param), Box::new(data));
+    }
+    // same as put, but if there is None, don't insert anything
+    pub fn put_opt<U: Clone + 'static>(&mut self, layer: Layer, param: Param, data: Option<U>) {
+        if let Some(d) = data {
+            self.data.insert((layer, param), Box::new(d));
+        }
+    }
+    pub fn get<U: Clone + 'static>(&self, layer: Layer, param: Param) -> Option<U> {
+        Some(self.data.get(&(layer, param))?.downcast_ref::<U>()?.clone())
+    }
+}
+
+pub struct LayerHash<'a> {
+    layer: Layer,
+    data: &'a HashMapWx
+} 
+
+impl<'a> LayerHash<'a> {
+    fn get<U: Copy + 'static>(&self, param: Param) -> Option<U> {
+        self.data.get(self.layer, param)
+    }
+}
+
+impl<'a> WxEntryLayer for LayerHash<'a> {
+    fn layer(&self) -> Layer {self.layer}
+    fn station(&self) -> Station {self.data.station.clone()}
+
+    fn temperature(&self) -> Option<Temperature> {self.get(Param::Temperature)}
+    fn pressure(&self) -> Option<Pressure> {self.get(Param::Pressure)}
+    fn visibility(&self) -> Option<Distance> {self.get(Param::Visibility)}
+
+    fn dewpoint(&self) -> Option<Temperature> {self.get(Param::Dewpoint).or(self.dewpoint_from_rh())}
+    fn relative_humidity(&self) -> Option<Fraction> {self.get(Param::RelativeHumidity).or(self.rh_from_dewpoint())}
+
+    fn wind_speed(&self) -> Option<Speed> {self.get(Param::WindSpeed).or(self.wind_speed_from_wind())}
+    fn wind_direction(&self) -> Option<Direction> {self.get(Param::WindDirection).or(self.wind_direction_from_wind())}
+    fn wind(&self) -> Option<Wind> {self.get(Param::Wind).or(self.wind_from_speed_and_direction())}
+}
+
+
 
 // BASIC WXENTRY IMPLEMENTATION ------------------------------------------------
 
-struct BasicWxEntry {
+pub struct BasicWxEntry {
     date_time: DateTime<Utc>,
     station: Station,
     layers: HashMap<Layer, BasicWxEntryLayer>
 }
 
-impl WxEntry<BasicWxEntryLayer> for BasicWxEntry {
+impl<'a> WxEntry<'a, &'a BasicWxEntryLayer> for BasicWxEntry {
     fn date_time(&self) -> DateTime<Utc> {self.date_time}
     fn station(&self) -> Station {self.station.clone()}
-    fn layers(&self) -> &HashMap<Layer, BasicWxEntryLayer> {&self.layers}
+    fn layer(&'a self, layer: Layer) -> Option<&'a BasicWxEntryLayer> {
+        self.layers.get(&layer)
+    }
 }
 
-struct BasicWxEntryLayer {
+pub struct BasicWxEntryLayer {
     layer: Layer,
     station: Station,
     temperature: Option<Temperature>,
@@ -587,7 +679,7 @@ struct BasicWxEntryLayer {
     dewpoint: Option<Temperature>,
 }
 
-impl WxEntryLayer for BasicWxEntryLayer {
+impl<'a> WxEntryLayer for &'a BasicWxEntryLayer {
     fn layer(&self) -> Layer {self.layer}
     fn station(&self) -> Station {self.station.clone()}
     fn temperature(&self) -> Option<Temperature> {self.temperature}
@@ -603,7 +695,6 @@ impl WxEntryLayer for BasicWxEntryLayer {
 #[cfg(test)]
 mod tests {
     use crate::*;
-    use crate::units::*;
     use crate::Layer::*;
 
     struct TestLayer {

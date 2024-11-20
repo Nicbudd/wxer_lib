@@ -99,7 +99,7 @@ mod hidden {
         #[strum(to_string = "kph")]
         Kph, 
         #[strum(to_string = "kts")]
-        Kts,
+        Knots,
         #[strum(to_string = "m/s")]
         Mps,  
     }
@@ -111,7 +111,7 @@ mod hidden {
             match self {
                 Kph => 1.,
                 Mph => 1.609344,
-                Kts => 1.852,
+                Knots => 1.852,
                 Mps => 3.6,
             }
         }
@@ -232,7 +232,7 @@ mod hidden {
     }
 
     // PERCENTAGE -----------------------------------------------------------
-    pub type Fractional = ProportionalUnit<FractionalUnit>;
+    pub type Fraction = ProportionalUnit<FractionalUnit>;
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
     #[allow(unused)]
@@ -485,12 +485,12 @@ mod tests {
         let mut s = Speed::new(180., Mph);
 
         // keep converting it back and forth between units
-        for (_i, u) in [Mph, Kph, Kts, Mps, Kts, Kph, Mph].iter().enumerate() {
+        for (_i, u) in [Mph, Kph, Knots, Mps, Knots, Kph, Mph].iter().enumerate() {
             
             s = s.convert(*u);
             assert!((s.value_in(Mph) - 180.).abs() < 0.01);
             assert!((s.value_in(Kph) - 289.68192).abs() < 0.01);
-            assert!((s.value_in(Kts) - 156.4157235421).abs() < 0.001);
+            assert!((s.value_in(Knots) - 156.4157235421).abs() < 0.001);
             assert!((s.value_in(Mps) - 80.4672).abs() < 0.001);
         }
 

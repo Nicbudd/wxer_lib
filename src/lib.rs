@@ -4,13 +4,12 @@ pub mod fetch;
 // use fetch::*;
 
 pub mod formulae;
-use formulae::*;
 
 pub mod db;
 // pub use db::*;
 
 pub mod units;
-// pub use units;
+pub use units::*;
 
 pub mod wxentry;
 pub use wxentry::*;

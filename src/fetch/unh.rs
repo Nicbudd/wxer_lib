@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use crate::units::*; 
 use crate::*;
@@ -25,7 +25,6 @@ pub async fn import(date: DateTime<Utc>) -> Result<StationData> {
 
     for entry_result in rdr.deserialize() {
         let entry: UNHData = entry_result?;
-        entry.layers.insert(Layer::NearSurface, &entry);
 
         db.insert(entry.date_time(), entry);
     }
@@ -55,7 +54,7 @@ fn deserialize_unh_dt<'de, D>(des: D) -> Result<DateTime<Utc>, D::Error>
     Ok(dt_utc)
 }
 #[derive(Debug, Deserialize)]
-struct UNHData<'a> {
+struct UNHData {
     #[serde(rename="Datetime")]
     #[serde(deserialize_with="deserialize_unh_dt")]
     dt: DateTime<Utc>,
@@ -86,12 +85,9 @@ struct UNHData<'a> {
 
     #[serde(rename="WindDir_D1_WVT")]
     wind_dir: f32,
-
-    #[serde(skip_deserializing)]
-    layers: HashMap<Layer, &'a UNHData<'a>>,
 }
 
-impl<'a> WxEntry<&'a UNHData<'a>> for UNHData<'a> {
+impl<'a> WxEntry<'a, &'a UNHData> for UNHData {
     fn date_time(&self) -> DateTime<Utc> {self.dt}
     fn station(&self) -> Station {
         Station {
@@ -100,7 +96,13 @@ impl<'a> WxEntry<&'a UNHData<'a>> for UNHData<'a> {
             coords: (43.1348, -70.9358)
         }
     }
-    fn layers(&self) -> &HashMap<Layer, &'a UNHData<'a>> {&self.layers}
+    fn layer(&self, layer: Layer) -> Option<&UNHData> {
+        if layer == Layer::NearSurface {
+            Some(self)
+        } else {
+            None
+        }
+    }
 
     fn precip_today(&self) -> Option<Precip> {
         Some(Precip { 
@@ -111,7 +113,7 @@ impl<'a> WxEntry<&'a UNHData<'a>> for UNHData<'a> {
     }
 } 
 
-impl<'a> WxEntryLayer for &'a UNHData<'a> {
+impl<'a> WxEntryLayer for &'a UNHData {
     fn layer(&self) -> Layer {Layer::NearSurface}
     fn station(&self) -> Station {
         Station {
@@ -124,8 +126,8 @@ impl<'a> WxEntryLayer for &'a UNHData<'a> {
     fn temperature(&self) -> Option<Temperature> {
         Some(Temperature::new(self.temperature_2m, Fahrenheit))
     }
-    fn relative_humidity(&self) -> Option<Fractional> {
-        Some(Fractional::new(self.relative_humidity, Percent))
+    fn relative_humidity(&self) -> Option<Fraction> {
+        Some(Fraction::new(self.relative_humidity, Percent))
     } 
     fn wind(&self) -> Option<Wind> {
         Some(Wind {

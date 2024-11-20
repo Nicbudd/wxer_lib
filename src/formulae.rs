@@ -10,7 +10,7 @@ const Md: f32 = 28.96546e-3; // kg/mol
 #[allow(non_upper_case_globals)]
 const Rd: f32 = R / Md; // (J K-1 kg-1)
 
-pub fn rh_to_dewpoint(temp: Temperature, rh: Fractional) -> Temperature {
+pub fn rh_to_dewpoint(temp: Temperature, rh: Fraction) -> Temperature {
     let t_c = temp.value_in(Celsius);
     
     let beta = 17.62; // constant
@@ -77,13 +77,13 @@ pub fn vapor_pressure(temperature: Temperature) -> Pressure {
     Pressure::new(value, HPa)
 }
 
-pub fn mixing_ratio(temperature: Temperature, station_pressure: Pressure) -> Fractional {
+pub fn mixing_ratio(temperature: Temperature, station_pressure: Pressure) -> Fraction {
     // returns in units of kg/kg
     // source: https://www.weather.gov/media/epz/wxcalc/mixingRatio.pdf
     let e: f32 = vapor_pressure(temperature).value_in(HPa);
     let p_sta = station_pressure.value_in(HPa);
     let g_kg =  621.97 * (e / (p_sta - e));
-    return Fractional::new(g_kg/1000., Decimal)
+    return Fraction::new(g_kg/1000., Decimal)
 }
 
 // an approximation
