@@ -18,7 +18,7 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
         .text()
         .await?;
 
-    let mut raw_ob: RawASOSObservation = serde_json::from_str(&resp)?;
+    let raw_ob: RawASOSObservation = serde_json::from_str(&resp)?;
 
     let ob = raw_ob.last_ob;
     
@@ -27,7 +27,7 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
     
     let mut wx_entry = HashMapWx::new(dt, station);
 
-    let precip_today = ignore_none(raw_ob.last_ob.precip_today, |x| {
+    let precip_today = ignore_none(ob.precip_today, |x| {
         Precip {
             unknown: PrecipAmount::new(x, Inch), 
             rain: PrecipAmount::new(0., Inch), 
@@ -35,8 +35,10 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
         }
     });
 
-    wx_entry.put(All, Param::SkyCover, skycover_from_vecs(raw_ob.last_ob.skycover, raw_ob.last_ob.skylevel)?);
-    wx_entry.put(All, Param::WindDirection, Direction::from_degrees(raw_ob.last_ob.winddirectiondeg? as u16)?);
+    let direction = ob.winddirectiondeg.map(|x| Direction::from_degrees(x as u16).ok()).flatten();
+
+    wx_entry.put(All, Param::SkyCover, skycover_from_vecs(ob.skycover, ob.skylevel)?);
+    wx_entry.put(All, Param::WindDirection, direction);
     wx_entry.put(All, Param::PrecipToday, precip_today);
     wx_entry.put(All, Param::RawMetar, ob.raw);
     wx_entry.put(All, Param::WxCodes, ob.present_wx);
@@ -52,7 +54,7 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
     
     let mut asos_db = BTreeMap::new();
 
-    asos_db.insert(dt, wx_entry);
+    asos_db.insert(dt, wx_entry.to_struct()?);
 
     Ok(asos_db)
 }

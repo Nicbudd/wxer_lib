@@ -26,7 +26,7 @@ pub async fn import(date: DateTime<Utc>) -> Result<StationData> {
     for entry_result in rdr.deserialize() {
         let entry: UNHData = entry_result?;
 
-        db.insert(entry.date_time(), entry);
+        db.insert(entry.date_time(), entry.to_struct()?);
     }
 
     Ok(db)
@@ -103,6 +103,7 @@ impl<'a> WxEntry<'a, &'a UNHData> for UNHData {
             None
         }
     }
+    fn layers(&self) -> Vec<Layer> {vec![Layer::NearSurface]}
 
     fn precip_today(&self) -> Option<Precip> {
         Some(Precip { 

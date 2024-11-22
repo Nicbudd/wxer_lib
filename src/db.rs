@@ -3,8 +3,9 @@ use futures::lock::Mutex;
 use chrono::{DateTime, Duration, Utc};
 use super::*;
 
-pub type StationData = BTreeMap<DateTime<Utc>, WxEntry>;
+pub type StationData = BTreeMap<DateTime<Utc>, WxEntryStruct>;
 pub type StationDatabase = Arc<Mutex<StationDatabaseInternal>>;
+
 #[derive(Debug, Clone)]
 pub struct StationDatabaseInternal {
     pub station: Station,

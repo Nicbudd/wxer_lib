@@ -1,15 +1,15 @@
-use std::{any::Any, collections::HashMap, f32::consts::PI, fmt::{self, Display}, hash::Hash};
-use anyhow::{Result, bail};
+use std::{any::Any, collections::{HashMap, HashSet}, f32::consts::PI, fmt::{self, Display}, hash::Hash};
+use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use derive_more::Display;
 
 use crate::units::*;
 use crate::formulae;
 
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Station {
     pub name: String,
     pub altitude: Altitude,
@@ -18,12 +18,13 @@ pub struct Station {
 
 
 
-pub trait WxEntry<'a, L: WxEntryLayer + 'a> where Self: Sized {
+pub trait WxEntry<'a, L: WxEntryLayer + 'a> where Self: Sized + fmt::Debug {
 
     // REQUIRED FIELDS ---------------------------------------------------------
     fn date_time(&self) -> DateTime<Utc>;
     fn station(&self) -> Station;
     fn layer(&'a self, layer: Layer) -> Option<L>;
+    fn layers(&self) -> Vec<Layer>;
     // fn new(station: &Station) -> Self;
 
     // OPTIONAL FIELDS ---------------------------------------------------------
@@ -72,6 +73,39 @@ pub trait WxEntry<'a, L: WxEntryLayer + 'a> where Self: Sized {
 
     fn indoor(&'a self) -> Option<L> {
         self.layer(Indoor)
+    }
+
+    fn to_struct(&'a self) -> Result<WxEntryStruct> {
+        let mut layers = HashMap::new();
+        
+        for layer in self.layers() {
+            let layer = self.layer(layer).context("Layer in layers() was not contained in layer(layer).")?;
+            
+            let l = WxEntryLayerStruct {
+                layer: layer.layer(),
+                station: layer.station(),
+                temperature: layer.temperature(),
+                pressure: layer.pressure(),
+                dewpoint: layer.dewpoint(),
+                visibility: layer.visibility(),
+                wind: layer.wind(),
+            };
+
+            layers.insert(layer.layer(), l);
+        }
+
+        Ok(WxEntryStruct {
+            altimeter: self.altimeter(),
+            cape: self.cape(),
+            date_time: self.date_time(),
+            station: self.station(),
+            layers,
+            skycover: self.skycover(),
+            wx_codes: self.wx_codes(),
+            raw_metar: self.raw_metar(),
+            precip_today: self.precip_today(),
+            precip: self.precip()
+        })
     }
 
 
@@ -314,7 +348,7 @@ impl Layer {
 
 
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct Wind {
     pub direction: Direction, // stored as degrees
     pub speed: Speed,
@@ -327,7 +361,7 @@ impl Display for Wind {
 }
 
 
-#[derive(Serialize, Clone, Copy, Display, PartialEq)]
+#[derive(Serialize, Debug, Clone, Copy, Display, PartialEq)]
 pub enum CloudLayerCoverage {
     #[display(fmt = "FEW")]
     Few,
@@ -351,7 +385,7 @@ impl CloudLayerCoverage {
 }
 
 
-#[derive(Serialize, Clone, Copy)]
+#[derive(Serialize, Debug, Clone, Copy)]
 pub struct CloudLayer {
     pub coverage: CloudLayerCoverage,
     pub height: u32, // given in feet
@@ -382,7 +416,7 @@ impl fmt::Display for CloudLayer {
     }
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum SkyCoverage {
     Clear,
@@ -400,7 +434,7 @@ impl fmt::Display for SkyCoverage {
     }
 }
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct Precip {
     pub unknown: PrecipAmount,
     pub rain: PrecipAmount,
@@ -566,13 +600,14 @@ impl Intensity {
 }
 
 // HASHMAP BASED IMPLEMENTATION ------------------------------------------------
+#[derive(Debug)]
 pub struct HashMapWx {
     date_time: DateTime<Utc>,
     station: Station,
     data: HashMap<(Layer, Param), Box<dyn Any>>
 }
 
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum Param {
     Temperature,
     Pressure,
@@ -595,6 +630,13 @@ impl<'a> WxEntry<'a, LayerHash<'a>> for HashMapWx {
     fn date_time(&self) -> DateTime<Utc> {self.date_time}
     fn station(&self) -> Station {self.station.clone()}
     fn layer(&'a self, layer: Layer) -> Option<LayerHash<'a>> {Some(LayerHash {layer, data: self})}
+    fn layers(&self) -> Vec<Layer> {
+        let mut set = HashSet::new();
+        for entry in self.data.keys() {
+            set.insert(entry.0);
+        }
+        set.iter().map(|x| x.to_owned()).collect()
+    }
 
     fn skycover(&self) -> Option<SkyCoverage> {self.get(All, Param::SkyCover)}
     fn wx_codes(&self) -> Option<Vec<String>> {self.get(All, Param::WxCodes)}
@@ -654,32 +696,52 @@ impl<'a> WxEntryLayer for LayerHash<'a> {
 
 
 // BASIC WXENTRY IMPLEMENTATION ------------------------------------------------
+// Can provide a consistent struct to handle
 
-pub struct BasicWxEntry {
+#[derive(Debug, Clone, Serialize)]
+pub struct WxEntryStruct {
     date_time: DateTime<Utc>,
     station: Station,
-    layers: HashMap<Layer, BasicWxEntryLayer>
+    layers: HashMap<Layer, WxEntryLayerStruct>,
+    
+    skycover: Option<SkyCoverage>,
+    wx_codes: Option<Vec<String>>,
+    raw_metar: Option<String>,
+    precip_today: Option<Precip>,
+    precip: Option<Precip>,
+    altimeter: Option<Pressure>,
+    cape: Option<SpecEnergy>,
 }
 
-impl<'a> WxEntry<'a, &'a BasicWxEntryLayer> for BasicWxEntry {
+impl<'a> WxEntry<'a, &'a WxEntryLayerStruct> for WxEntryStruct {
     fn date_time(&self) -> DateTime<Utc> {self.date_time}
     fn station(&self) -> Station {self.station.clone()}
-    fn layer(&'a self, layer: Layer) -> Option<&'a BasicWxEntryLayer> {
+    fn layer(&'a self, layer: Layer) -> Option<&'a WxEntryLayerStruct> {
         self.layers.get(&layer)
     }
+    fn layers(&self) -> Vec<Layer> {self.layers.keys().map(|x| x.to_owned()).collect()}
+
+    fn skycover(&self)     -> Option<SkyCoverage> {self.skycover.clone()}
+    fn wx_codes(&self)     -> Option<Vec<String>> {self.wx_codes.clone()}
+    fn raw_metar(&self)    -> Option<String>      {self.raw_metar.clone()}
+    fn precip_today(&self) -> Option<Precip>      {self.precip_today}
+    fn precip(&self)       -> Option<Precip>      {self.precip}
+    fn altimeter(&self)    -> Option<Pressure>    {self.altimeter}
+    fn cape(&self)         -> Option<SpecEnergy>  {self.cape} 
 }
 
-pub struct BasicWxEntryLayer {
+#[derive(Debug, Clone, Serialize)]
+pub struct WxEntryLayerStruct {
     layer: Layer,
     station: Station,
     temperature: Option<Temperature>,
     pressure: Option<Pressure>,
-    wind: Option<Wind>,
     visibility: Option<Distance>,
+    wind: Option<Wind>,
     dewpoint: Option<Temperature>,
 }
 
-impl<'a> WxEntryLayer for &'a BasicWxEntryLayer {
+impl<'a> WxEntryLayer for &'a WxEntryLayerStruct {
     fn layer(&self) -> Layer {self.layer}
     fn station(&self) -> Station {self.station.clone()}
     fn temperature(&self) -> Option<Temperature> {self.temperature}

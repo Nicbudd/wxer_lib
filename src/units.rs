@@ -17,9 +17,10 @@ pub use hidden::*;
 mod hidden {
     use std::fmt;
     use std::ops::{Add, Div, Mul, Sub};
-    use serde::{ser::SerializeStruct, Serialize};
+    use serde::{ser, Serializer};
+    use serde::{Deserialize, ser::SerializeStruct, Serialize};
     use strum_macros::Display;
-    use anyhow::{Result, bail};
+    use anyhow::{bail, Result};
     use super::*;
 
     // INTERNAL USE UNIT TRAITS  -----------------------------------------------
@@ -50,7 +51,7 @@ mod hidden {
     // PROPORTIONAL UNIT STRUCT ------------------------------------------------
     // helpful for building most units (where the conversion between units are proportional)
 
-    #[derive(Clone, Copy, Debug)]
+    #[derive(Clone, Copy, Debug, Deserialize)]
     pub struct ProportionalUnit<T: Proportional> {
         value: f32,
         unit: T,
@@ -176,18 +177,23 @@ mod hidden {
     pub type Distance = ProportionalUnit<DistanceUnit>;
     pub type Altitude = ProportionalUnit<DistanceUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum DistanceUnit {
         #[strum(to_string = "m")]
+        #[serde(alias = "m")]
         Meter, 
         #[strum(to_string = "km")]
+        #[serde(alias = "km")]
         Kilometer, 
         #[strum(to_string = "ft")]
+        #[serde(alias = "ft")]
         Feet, 
         #[strum(to_string = "mi")]
+        #[serde(alias = "mi")]
         Mile, 
         #[strum(to_string = "nmi")]
+        #[serde(alias = "nmi")]
         NauticalMile, 
     }
     pub use DistanceUnit::*;
@@ -204,6 +210,8 @@ mod hidden {
             }
         }
     }
+
+
 
     // PRECIP AMOUNT -----------------------------------------------------------
     pub type PrecipAmount = ProportionalUnit<PrecipUnit>;
@@ -260,7 +268,7 @@ mod hidden {
     // TEMPERATURE -------------------------------------------------------------
     // Not a proportional unit
 
-    #[derive(Clone, Copy, Debug)]
+    #[derive(Clone, Copy, Debug, Serialize)]
     pub struct Temperature {
         value: f32,
         unit: TemperatureUnit
@@ -277,10 +285,13 @@ mod hidden {
     #[allow(unused)]
     pub enum TemperatureUnit {
         #[strum(to_string = "°K")]
+        #[serde(rename = "°K")]
         Kelvin, 
         #[strum(to_string = "°F")]
+        #[serde(rename = "°F")]
         Fahrenheit, 
         #[strum(to_string = "°C")]
+        #[serde(rename = "°C")]
         Celsius
     }
     pub use TemperatureUnit::*;
@@ -314,8 +325,42 @@ mod hidden {
     // DIRECTION ---------------------------------------------------------------
     // does not use the standard unit trait
 
-    #[derive(Clone, Copy, Serialize, derive_more::Display)]
-    pub struct Direction(u16); 
+    #[derive(Debug, Clone, Copy, Serialize, derive_more::Display)]
+    pub struct Direction(
+        #[serde(serialize_with = "serialize_cardinal")]
+        u16
+    ); 
+
+    fn int_to_cardinal(n: u16) -> Option<&'static str> {
+         match n {
+            350 | 0 | 10     => Some("N"),
+            20 | 30          => Some("NNE"),
+            40 | 50          => Some("NE"),
+            60 | 70          => Some("ENE"),
+            80 | 90 | 100    => Some("E"),
+            110 | 120        => Some("ESE"),
+            130 | 140        => Some("SE"),
+            150 | 160        => Some("SSE"),
+            170 | 180 | 190  => Some("S"),
+            200 | 210        => Some("SSW"),
+            220 | 230        => Some("SW"),
+            240 | 250        => Some("WSW"),
+            260 | 270 | 280  => Some("W"),
+            290 | 300        => Some("WNW"),
+            310 | 320        => Some("NW"),
+            330 | 340        => Some("NNW"),
+            _ => None
+        }
+    }
+
+    fn serialize_cardinal<S>(n: &u16, s: S) -> Result::<S::Ok, S::Error> where S: Serializer {
+
+        if let Some(strr) = int_to_cardinal(*n) {
+            s.serialize_str(strr)
+        } else {
+            Err(ser::Error::custom("Invalid cardinal value"))
+        }
+    }
 
     impl Direction {
         fn sanitize_degrees(degrees: u16) -> Result<u16> {
