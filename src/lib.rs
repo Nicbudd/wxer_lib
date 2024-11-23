@@ -4,6 +4,7 @@ pub mod fetch;
 // use fetch::*;
 
 pub mod formulae;
+pub use formulae::*;
 
 pub mod db;
 // pub use db::*;

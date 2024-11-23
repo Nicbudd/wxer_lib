@@ -87,21 +87,31 @@ mod hidden {
         }
     }
 
+    impl<T: Proportional> ProportionalUnit<T> {
+        pub const fn new_const(value: f32, unit: T) -> Self {
+            ProportionalUnit { value, unit }
+        }
+    }
+
     // UNITS -------------------------------------------------------------------
 
     // WIND ----------------------------------------------------------------
     pub type Speed = ProportionalUnit<SpeedUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum SpeedUnit {
         #[strum(to_string = "mph")]
+        #[serde(rename = "mph")]
         Mph, 
         #[strum(to_string = "kph")]
+        #[serde(rename = "kph", alias = "k/h")]
         Kph, 
         #[strum(to_string = "kts")]
+        #[serde(rename = "kts", alias = "kt", alias = "knots", alias = "kn", alias = "nmi/s", alias = "nm/s")]
         Knots,
         #[strum(to_string = "m/s")]
+        #[serde(alias = "mps", rename = "m/s")]
         Mps,  
     }
     pub use SpeedUnit::*;
@@ -121,18 +131,23 @@ mod hidden {
     // PRESSURE ----------------------------------------------------------------
     pub type Pressure = ProportionalUnit<PressureUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum PressureUnit {
         #[strum(to_string = "hPa")]
+        #[serde(rename = "hPa")]
         HPa, 
         #[strum(to_string = "mb")]
+        #[serde(rename = "mb", alias = "mbar")]
         Mbar, 
         #[strum(to_string = "inHg")]
+        #[serde(alias = "inhg", rename = "inHg")]
         InHg,
         #[strum(to_string = "psi")]
+        #[serde(rename = "psi")]
         Psi,  
         #[strum(to_string = "atm")]
+        #[serde(rename = "atm")]
         Atm,  
     }
     pub use PressureUnit::*;
@@ -181,19 +196,19 @@ mod hidden {
     #[allow(unused)]
     pub enum DistanceUnit {
         #[strum(to_string = "m")]
-        #[serde(alias = "m")]
+        #[serde(rename = "m")]
         Meter, 
         #[strum(to_string = "km")]
-        #[serde(alias = "km")]
+        #[serde(rename = "km")]
         Kilometer, 
         #[strum(to_string = "ft")]
-        #[serde(alias = "ft")]
+        #[serde(rename = "ft")]
         Feet, 
         #[strum(to_string = "mi")]
-        #[serde(alias = "mi")]
+        #[serde(rename = "mi")]
         Mile, 
         #[strum(to_string = "nmi")]
-        #[serde(alias = "nmi")]
+        #[serde(rename = "nmi")]
         NauticalMile, 
     }
     pub use DistanceUnit::*;
@@ -223,7 +238,7 @@ mod hidden {
         Mm, 
         #[strum(to_string = "in")]
         Inch, 
-        #[strum(to_string = "in")]
+        #[strum(to_string = "cm")]
         Cm, 
     }
     pub use PrecipUnit::*;
@@ -281,17 +296,17 @@ mod hidden {
         }
     }
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum TemperatureUnit {
         #[strum(to_string = "°K")]
-        #[serde(rename = "°K")]
+        #[serde(rename = "°K", alias = "K")]
         Kelvin, 
         #[strum(to_string = "°F")]
-        #[serde(rename = "°F")]
+        #[serde(rename = "°F", alias = "F")]
         Fahrenheit, 
         #[strum(to_string = "°C")]
-        #[serde(rename = "°C")]
+        #[serde(rename = "°C", alias = "C")]
         Celsius
     }
     pub use TemperatureUnit::*;

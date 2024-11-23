@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::*;
 use crate::Layer::*;
@@ -8,7 +8,7 @@ use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::Deserialize;
 use anyhow::{bail, Result};
 
-pub async fn import(station_name: &str, network: &str, station: Station) -> Result<db::StationData> {
+pub async fn import(station_name: &str, network: &str, station: Arc<Station>) -> Result<db::StationData> {
     let url = format!("http://mesonet.agron.iastate.edu/json/current.py?station={}&network={}", station_name, network);
 
     //dbg!(&url);
@@ -54,7 +54,7 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
     
     let mut asos_db = BTreeMap::new();
 
-    asos_db.insert(dt, wx_entry.to_struct()?);
+    asos_db.insert(dt, wx_entry.to_struct(station)?);
 
     Ok(asos_db)
 }

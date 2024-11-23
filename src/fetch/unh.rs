@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::units::*; 
 use crate::*;
@@ -9,7 +9,16 @@ use chrono_tz::US::Eastern;
 use serde::Deserialize;
 use anyhow::Result;
 
+
+
 pub async fn import(date: DateTime<Utc>) -> Result<StationData> {
+
+    let station = Arc::new(Station {
+        name: "UNH".into(),
+        altitude: Altitude::new(28.0, Meter), //meters
+        coords: (43.1348, -70.9358).into(),
+        time_zone: Eastern
+    });
 
     let day = date.with_timezone(&Eastern).ordinal();
     let year = date.with_timezone(&Eastern).year();
@@ -24,9 +33,10 @@ pub async fn import(date: DateTime<Utc>) -> Result<StationData> {
     let mut db = BTreeMap::new();
 
     for entry_result in rdr.deserialize() {
-        let entry: UNHData = entry_result?;
+        let mut entry: UNHData = entry_result?;
+        entry.station = station.clone();
 
-        db.insert(entry.date_time(), entry.to_struct()?);
+        db.insert(entry.date_time(), entry.to_struct(Some(station.clone()))?);
     }
 
     Ok(db)
@@ -85,20 +95,29 @@ struct UNHData {
 
     #[serde(rename="WindDir_D1_WVT")]
     wind_dir: f32,
+
+    #[serde(deserialize_with = "unh_station")]
+    station: Arc<Station>
+}
+
+fn unh_station<'de, D>(_des: D) -> Result<Arc<Station>, D::Error> 
+where D: serde::Deserializer<'de> {
+    Ok(Arc::new(Station {
+        name: "UNH".into(),
+        altitude: Altitude::new(28.0, Meter), //meters
+        coords: (43.1348, -70.9358).into(),
+        time_zone: Eastern
+    }))
 }
 
 impl<'a> WxEntry<'a, &'a UNHData> for UNHData {
     fn date_time(&self) -> DateTime<Utc> {self.dt}
-    fn station(&self) -> Station {
-        Station {
-            name: "UNH".into(),
-            altitude: Altitude::new(28.0, Meter), //meters
-            coords: (43.1348, -70.9358)
-        }
-    }
-    fn layer(&self, layer: Layer) -> Option<&UNHData> {
+    #[allow(refining_impl_trait)]
+    fn station(&self) -> Arc<Station> {self.station.clone()}
+    
+    fn layer(&'a self, layer: Layer) -> Option<&UNHData> {
         if layer == Layer::NearSurface {
-            Some(self)
+            Some(&self)
         } else {
             None
         }
@@ -114,15 +133,10 @@ impl<'a> WxEntry<'a, &'a UNHData> for UNHData {
     }
 } 
 
-impl<'a> WxEntryLayer for &'a UNHData {
+impl<'a> WxEntryLayer for &UNHData {
     fn layer(&self) -> Layer {Layer::NearSurface}
-    fn station(&self) -> Station {
-        Station {
-            name: "UNH".into(),
-            altitude: Altitude::new(28.0, Meter), //meters
-            coords: (43.1348, -70.9358)
-        }
-    }
+    #[allow(refining_impl_trait)]
+    fn station(&self) -> Arc<Station> {self.station.clone()}
 
     fn temperature(&self) -> Option<Temperature> {
         Some(Temperature::new(self.temperature_2m, Fahrenheit))
