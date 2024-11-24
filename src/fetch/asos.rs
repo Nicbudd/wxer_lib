@@ -71,7 +71,7 @@ pub async fn import(station_name: &str, network: &str, station: &'static Station
         wx_entry.put(NearSurface, Param::Visibility, Distance::new(x, Mile));
     }
     if let Some(x) = ob.altimeterin {
-        wx_entry.put(SeaLevel, Param::Pressure,  Pressure::new(x, Mbar));
+        wx_entry.put(SeaLevel, Param::Pressure,  Pressure::new(x, InHg));
     }
 
     let mut asos_db = BTreeMap::new();
