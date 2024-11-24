@@ -17,8 +17,8 @@ pub use hidden::*;
 mod hidden {
     use std::fmt;
     use std::ops::{Add, Div, Mul, Sub};
-    use serde::{ser, Serializer};
-    use serde::{Deserialize, ser::SerializeStruct, Serialize};
+    use serde::{Serializer, ser::SerializeStruct};
+    use serde::{Deserialize, Serialize};
     use strum_macros::Display;
     use anyhow::{bail, Result};
     use super::*;
@@ -87,21 +87,31 @@ mod hidden {
         }
     }
 
+    impl<T: Proportional> ProportionalUnit<T> {
+        pub const fn new_const(value: f32, unit: T) -> Self {
+            ProportionalUnit { value, unit }
+        }
+    }
+
     // UNITS -------------------------------------------------------------------
 
     // WIND ----------------------------------------------------------------
     pub type Speed = ProportionalUnit<SpeedUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum SpeedUnit {
         #[strum(to_string = "mph")]
+        #[serde(rename = "mph")]
         Mph, 
         #[strum(to_string = "kph")]
+        #[serde(rename = "kph", alias = "k/h")]
         Kph, 
         #[strum(to_string = "kts")]
+        #[serde(rename = "kts", alias = "kt", alias = "knots", alias = "kn", alias = "nmi/s", alias = "nm/s")]
         Knots,
         #[strum(to_string = "m/s")]
+        #[serde(alias = "mps", rename = "m/s")]
         Mps,  
     }
     pub use SpeedUnit::*;
@@ -121,18 +131,23 @@ mod hidden {
     // PRESSURE ----------------------------------------------------------------
     pub type Pressure = ProportionalUnit<PressureUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum PressureUnit {
         #[strum(to_string = "hPa")]
+        #[serde(rename = "hPa")]
         HPa, 
         #[strum(to_string = "mb")]
+        #[serde(rename = "mb", alias = "mbar")]
         Mbar, 
         #[strum(to_string = "inHg")]
+        #[serde(alias = "inhg", rename = "inHg")]
         InHg,
         #[strum(to_string = "psi")]
+        #[serde(rename = "psi")]
         Psi,  
         #[strum(to_string = "atm")]
+        #[serde(rename = "atm")]
         Atm,  
     }
     pub use PressureUnit::*;
@@ -157,8 +172,10 @@ mod hidden {
     #[allow(unused)]
     pub enum SpecEnergyUnit {
         #[strum(to_string = "J/kg")]
+        #[serde(rename = "J/kg")]
         Jkg, 
         #[strum(to_string = "m^2/s^2")]
+        #[serde(rename = "m^2/s^2")]
         M2s2, 
     }
     pub use SpecEnergyUnit::*;
@@ -181,19 +198,19 @@ mod hidden {
     #[allow(unused)]
     pub enum DistanceUnit {
         #[strum(to_string = "m")]
-        #[serde(alias = "m")]
+        #[serde(rename = "m")]
         Meter, 
         #[strum(to_string = "km")]
-        #[serde(alias = "km")]
+        #[serde(rename = "km")]
         Kilometer, 
         #[strum(to_string = "ft")]
-        #[serde(alias = "ft")]
+        #[serde(rename = "ft")]
         Feet, 
         #[strum(to_string = "mi")]
-        #[serde(alias = "mi")]
+        #[serde(rename = "mi")]
         Mile, 
         #[strum(to_string = "nmi")]
-        #[serde(alias = "nmi")]
+        #[serde(rename = "nmi")]
         NauticalMile, 
     }
     pub use DistanceUnit::*;
@@ -220,10 +237,13 @@ mod hidden {
     #[allow(unused)]
     pub enum PrecipUnit {
         #[strum(to_string = "mm")]
+        #[serde(rename = "mm")]
         Mm, 
         #[strum(to_string = "in")]
+        #[serde(rename = "in")]
         Inch, 
-        #[strum(to_string = "in")]
+        #[strum(to_string = "cm")]
+        #[serde(rename = "cm")]
         Cm, 
     }
     pub use PrecipUnit::*;
@@ -246,10 +266,13 @@ mod hidden {
     #[allow(unused)]
     pub enum FractionalUnit {
         #[strum(to_string = "%")]
+        #[serde(rename = "%")]
         Percent, 
         #[strum(to_string = "")]
+        #[serde(rename = "")]
         Decimal, 
         #[strum(to_string = "1/1000")]
+        #[serde(rename = "1/1000")]
         Milli, 
     }
     pub use FractionalUnit::*;
@@ -281,17 +304,17 @@ mod hidden {
         }
     }
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum TemperatureUnit {
         #[strum(to_string = "°K")]
-        #[serde(rename = "°K")]
+        #[serde(rename = "°K", alias = "K")]
         Kelvin, 
         #[strum(to_string = "°F")]
-        #[serde(rename = "°F")]
+        #[serde(rename = "°F", alias = "F")]
         Fahrenheit, 
         #[strum(to_string = "°C")]
-        #[serde(rename = "°C")]
+        #[serde(rename = "°C", alias = "C")]
         Celsius
     }
     pub use TemperatureUnit::*;
@@ -325,11 +348,18 @@ mod hidden {
     // DIRECTION ---------------------------------------------------------------
     // does not use the standard unit trait
 
-    #[derive(Debug, Clone, Copy, Serialize, derive_more::Display)]
-    pub struct Direction(
-        #[serde(serialize_with = "serialize_cardinal")]
-        u16
-    ); 
+    #[derive(Debug, Clone, Copy, derive_more::Display)]
+    pub struct Direction(u16); 
+
+    impl Serialize for Direction {
+        fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+            where S: Serializer {
+            let mut dir = serializer.serialize_struct("Direction", 2)?;
+            dir.serialize_field("degrees", &self.0)?;
+            dir.serialize_field("cardinal", self.cardinal())?;
+            dir.end()
+        }
+    }
 
     fn int_to_cardinal(n: u16) -> Option<&'static str> {
          match n {
@@ -353,14 +383,14 @@ mod hidden {
         }
     }
 
-    fn serialize_cardinal<S>(n: &u16, s: S) -> Result::<S::Ok, S::Error> where S: Serializer {
+    // fn serialize_cardinal<S>(n: &u16, s: S) -> Result::<S::Ok, S::Error> where S: Serializer {
 
-        if let Some(strr) = int_to_cardinal(*n) {
-            s.serialize_str(strr)
-        } else {
-            Err(ser::Error::custom("Invalid cardinal value"))
-        }
-    }
+    //     if let Some(strr) = int_to_cardinal(*n) {
+    //         s.serialize_str(strr)
+    //     } else {
+    //         Err(ser::Error::custom("Invalid cardinal value"))
+    //     }
+    // }
 
     impl Direction {
         fn sanitize_degrees(degrees: u16) -> Result<u16> {
@@ -381,25 +411,7 @@ mod hidden {
         }
 
         pub fn cardinal(&self) -> &'static str {
-            match self.0 {
-                350 | 0 | 10 => "N",
-                20 | 30 => "NNE",
-                40 | 50 => "NE",
-                60 | 70 => "ENE",
-                80 | 90 | 100 => "E",
-                110 | 120 => "ESE",
-                130 | 140 => "SE",
-                150 | 160 => "SSE",
-                170 | 180 | 190 => "S",
-                200 | 210 => "SSW",
-                220 | 230 => "SW",
-                240 | 250 => "WSW",
-                260 | 270 | 280 => "W",
-                290 | 300 => "WNW",
-                310 | 320 => "NW",            
-                330 | 340 => "NNW",
-                _ => unreachable!("Direction struct contained {}, which is invalid.", self.0)
-            }
+            int_to_cardinal(self.0).expect("Did not find a rounded cardinal degree")
         }
 
         pub fn degrees(&self) -> u16 {

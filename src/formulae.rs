@@ -10,7 +10,7 @@ const Md: f32 = 28.96546e-3; // kg/mol
 #[allow(non_upper_case_globals)]
 const Rd: f32 = R / Md; // (J K-1 kg-1)
 
-pub fn rh_to_dewpoint(temp: Temperature, rh: Fraction) -> Temperature {
+pub fn dewpoint_from_rh(temp: Temperature, rh: Fraction) -> Temperature {
     let t_c = temp.value_in(Celsius);
     
     let beta = 17.62; // constant
@@ -23,6 +23,14 @@ pub fn rh_to_dewpoint(temp: Temperature, rh: Fraction) -> Temperature {
     let dp_c = (lambda*combined_term)/(beta-combined_term);
 
     Temperature::new(dp_c, Celsius)
+}
+
+pub fn rh_from_dewpoint(temp: Temperature, dewpoint: Temperature) -> Fraction{
+    let t = temp.value_in(Celsius);
+    let td = dewpoint.value_in(Celsius);
+    let top_term = ((17.625 * td)/(243.03 + td)).exp();
+    let bottom_term = ((17.625 * t)/(243.03 + t)).exp();
+    Fraction::new(top_term / bottom_term, Decimal)
 }
 
 pub fn distance_between_coords(lat1: f32, long1: f32, lat2: f32, long2: f32) -> Distance {
