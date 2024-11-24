@@ -8,7 +8,7 @@ use crate::*;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WxAll {
-    #[serde(skip_serializing)]
+    // #[serde(skip_serializing)]
     pub date_time: DateTime<Utc>,
     pub date_time_local: DateTime<Tz>,
     #[serde(skip_serializing)]
