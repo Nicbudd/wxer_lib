@@ -62,7 +62,7 @@ pub async fn import(station_name: &str, network: &str, station: &'static Station
         wx_entry.put(NearSurface, Param::WindSpeed, Speed::new(x, Knots));
     }
     if let Some(x) = ob.winddirectiondeg {
-        wx_entry.put(NearSurface, Param::WindDirection,Speed::new(x, Knots));
+        wx_entry.put(NearSurface, Param::WindDirection,Direction::from_degrees(x as u16).ok());
     }
     if let Some(x) = ob.altimeterin {
         wx_entry.put(NearSurface, Param::Altimeter, Pressure::new(x, InHg));
