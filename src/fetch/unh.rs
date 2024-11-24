@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 
 use crate::units::*; 
 use crate::*;
@@ -11,32 +11,24 @@ use anyhow::Result;
 
 
 
-pub async fn import(date: DateTime<Utc>) -> Result<StationData> {
-
-    let station = Arc::new(Station {
-        name: "UNH".into(),
-        altitude: Altitude::new(28.0, Meter), //meters
-        coords: (43.1348, -70.9358).into(),
-        time_zone: Eastern
-    });
+pub async fn import(date: DateTime<Utc>, station: &'static Station) -> Result<StationData> {
 
     let day = date.with_timezone(&Eastern).ordinal();
     let year = date.with_timezone(&Eastern).year();
 
     let url = format!("https://www.weather.unh.edu/data/{year}/{day}.txt");
-    // dbg!(&url);
 
-    let unh_text = reqwest::get(&url).await?.text().await?;
+    let unh_text= reqwest::get(&url).await?.text().await?;
 
     let mut rdr = csv::Reader::from_reader(unh_text.as_bytes());
 
     let mut db = BTreeMap::new();
 
     for entry_result in rdr.deserialize() {
-        let mut entry: UNHData = entry_result?;
-        entry.station = station.clone();
+        let data: UNHData = entry_result?;
+        let entry = UNHDataWithStation {data, station};
 
-        db.insert(entry.date_time(), entry.to_struct(Some(station.clone()))?);
+        db.insert(entry.date_time(), entry.to_struct()?);
     }
 
     Ok(db)
@@ -44,25 +36,6 @@ pub async fn import(date: DateTime<Utc>) -> Result<StationData> {
     // Ok(result_map)
 }
 
-fn deserialize_unh_dt<'de, D>(des: D) -> Result<DateTime<Utc>, D::Error> 
-    where D: serde::Deserializer<'de> {
-
-    let s = String::deserialize(des)?;
-
-    let dt_naive = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S").map_err(serde::de::Error::custom)?;
-
-    let local_result: LocalResult<DateTime<Local>> = Local.from_local_datetime( &dt_naive); 
-
-    let dt_local = match local_result {
-        LocalResult::None => {DateTime::default()}
-        LocalResult::Single(a) => a,
-        LocalResult::Ambiguous(a, _) => a, // idc 
-    };
-
-    let dt_utc = dt_local.naive_utc().and_utc();
-
-    Ok(dt_utc)
-}
 #[derive(Debug, Deserialize)]
 struct UNHData {
     #[serde(rename="Datetime")]
@@ -95,27 +68,40 @@ struct UNHData {
 
     #[serde(rename="WindDir_D1_WVT")]
     wind_dir: f32,
-
-    #[serde(deserialize_with = "unh_station")]
-    station: Arc<Station>
 }
 
-fn unh_station<'de, D>(_des: D) -> Result<Arc<Station>, D::Error> 
-where D: serde::Deserializer<'de> {
-    Ok(Arc::new(Station {
-        name: "UNH".into(),
-        altitude: Altitude::new(28.0, Meter), //meters
-        coords: (43.1348, -70.9358).into(),
-        time_zone: Eastern
-    }))
+#[derive(Debug)]
+struct UNHDataWithStation {
+    data: UNHData,
+    station: &'static Station
 }
 
-impl<'a> WxEntry<'a, &'a UNHData> for UNHData {
-    fn date_time(&self) -> DateTime<Utc> {self.dt}
+fn deserialize_unh_dt<'de, D>(des: D) -> Result<DateTime<Utc>, D::Error> 
+    where D: serde::Deserializer<'de> {
+
+    let s = String::deserialize(des)?;
+
+    let dt_naive = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S").map_err(serde::de::Error::custom)?;
+
+    let local_result: LocalResult<DateTime<Local>> = Local.from_local_datetime( &dt_naive); 
+
+    let dt_local = match local_result {
+        LocalResult::None => {DateTime::default()}
+        LocalResult::Single(a) => a,
+        LocalResult::Ambiguous(a, _) => a, // idc 
+    };
+
+    let dt_utc = dt_local.naive_utc().and_utc();
+
+    Ok(dt_utc)
+}
+
+impl<'a> WxEntry<'a, &'a UNHDataWithStation> for UNHDataWithStation {
+    fn date_time(&self) -> DateTime<Utc> {self.data.dt}
     #[allow(refining_impl_trait)]
-    fn station(&self) -> Arc<Station> {self.station.clone()}
+    fn station(&self) -> &'static Station {self.station}
     
-    fn layer(&'a self, layer: Layer) -> Option<&UNHData> {
+    fn layer(&'a self, layer: Layer) -> Option<&UNHDataWithStation> {
         if layer == Layer::NearSurface {
             Some(&self)
         } else {
@@ -127,27 +113,27 @@ impl<'a> WxEntry<'a, &'a UNHData> for UNHData {
     fn precip_today(&self) -> Option<Precip> {
         Some(Precip { 
             unknown: PrecipAmount::new(0., Inch), 
-            rain: PrecipAmount::new(self.rain, Inch), 
+            rain: PrecipAmount::new(self.data.rain, Inch), 
             snow: PrecipAmount::new(0., Inch) 
         })
     }
 } 
 
-impl<'a> WxEntryLayer for &UNHData {
+impl<'a> WxEntryLayer for &UNHDataWithStation {
     fn layer(&self) -> Layer {Layer::NearSurface}
     #[allow(refining_impl_trait)]
-    fn station(&self) -> Arc<Station> {self.station.clone()}
+    fn station(&self) -> &'static Station {self.station}
 
     fn temperature(&self) -> Option<Temperature> {
-        Some(Temperature::new(self.temperature_2m, Fahrenheit))
+        Some(Temperature::new(self.data.temperature_2m, Fahrenheit))
     }
     fn relative_humidity(&self) -> Option<Fraction> {
-        Some(Fraction::new(self.relative_humidity, Percent))
+        Some(Fraction::new(self.data.relative_humidity, Percent))
     } 
     fn wind(&self) -> Option<Wind> {
         Some(Wind {
-            direction: Direction::from_degrees(self.wind_dir as u16).ok()?,
-            speed: Speed::new(self.wind_speed, Mph)
+            direction: Direction::from_degrees(self.data.wind_dir as u16).ok()?,
+            speed: Speed::new(self.data.wind_speed, Mph)
         })
     }
 }

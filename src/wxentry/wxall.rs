@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
@@ -8,39 +8,40 @@ use crate::*;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WxAll {
-    date_time: DateTime<Utc>,
-    date_time_local: DateTime<Tz>,
     #[serde(skip_serializing)]
-    station: Arc<Station>,
-    layers: HashMap<Layer, WxAllLayer>,
+    pub date_time: DateTime<Utc>,
+    pub date_time_local: DateTime<Tz>,
+    #[serde(skip_serializing)]
+    pub station: &'static Station,
+    pub layers: HashMap<Layer, WxAllLayer>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    skycover: Option<SkyCoverage>,
+    pub skycover: Option<SkyCoverage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    wx_codes: Option<Vec<String>>,
+    pub wx_codes: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    wx: Option<Wx>,
+    pub wx: Option<Wx>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    raw_metar: Option<String>,
+    pub raw_metar: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    precip_today: Option<Precip>,
+    pub precip_today: Option<Precip>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    precip: Option<Precip>,
+    pub precip: Option<Precip>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    altimeter: Option<Pressure>,
+    pub altimeter: Option<Pressure>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    cape: Option<SpecEnergy>,
+    pub cape: Option<SpecEnergy>,
     
     #[serde(skip_serializing_if = "Option::is_none")]
-    best_slp: Option<Pressure>,
+    pub best_slp: Option<Pressure>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WxAllLayer {
-    layer: Layer,
-    height_msl: Altitude,
     #[serde(skip_serializing)]
-    station: Arc<Station>,
+    layer: Layer,
+    #[serde(skip_serializing)]
+    station: &'static Station,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<Temperature>,
@@ -102,8 +103,7 @@ impl WxAll {
         for (layer, s) in &wx.layers {
             let l = WxAllLayer { 
                 layer: *layer,
-                height_msl: s.height_msl(),
-                station: s.station_arc(), 
+                station: s.station(), 
                 temperature: s.temperature().map(|x| x.convert(units.temperature)), 
                 pressure: s.pressure().map(|x| x.convert(units.pressure)), 
                 visibility: s.visibility().map(|x| x.convert(units.distance)), 
@@ -126,7 +126,7 @@ impl WxAll {
         WxAll { 
             date_time: wx.date_time(), 
             date_time_local: wx.date_time_local(), 
-            station: wx.station_arc(), 
+            station: wx.station(), 
             layers, 
             skycover: wx.skycover(), 
             wx_codes: wx.wx_codes(), 
@@ -144,7 +144,7 @@ impl WxAll {
 impl<'a> WxEntry<'a, &'a WxAllLayer> for WxAll {
     fn date_time(&self) -> chrono::DateTime<chrono::Utc> {self.date_time}
     #[allow(refining_impl_trait)]
-    fn station(&self) -> Arc<Station> {self.station.clone()}
+    fn station(&self) -> &'static Station {self.station}
     fn layer(&'a self, layer: Layer) -> Option<&WxAllLayer> {self.layers.get(&layer)}
     fn layers(&self) -> Vec<Layer> {self.layers.iter().map(|x| x.0.to_owned()).collect()}
 
@@ -160,7 +160,7 @@ impl<'a> WxEntry<'a, &'a WxAllLayer> for WxAll {
 impl<'a> WxEntryLayer for &'a WxAllLayer {
     fn layer(&self) -> Layer {self.layer}
     #[allow(refining_impl_trait)]
-    fn station(&self) -> Arc<Station> {self.station.clone()}
+    fn station(&self) -> &'static Station {self.station}
 
     fn temperature(&self) -> Option<Temperature> {self.temperature}
     fn pressure(&self) -> Option<Pressure> {self.pressure}

@@ -1,5 +1,5 @@
 
-use std::{any::Any, collections::{HashMap, HashSet}, sync::Arc};
+use std::{any::Any, collections::{HashMap, HashSet}};
 
 use chrono::{DateTime, Utc};
 
@@ -8,14 +8,14 @@ use crate::*;
 #[derive(Debug)]
 pub struct HashMapWx {
     date_time: DateTime<Utc>,
-    station: Arc<Station>,
+    station: &'static Station,
     data: HashMap<(Layer, Param), Box<dyn Any>>
 }
 
 impl<'a> WxEntry<'a, LayerHash<'a>> for HashMapWx {
     fn date_time(&self) -> DateTime<Utc> {self.date_time}
     #[allow(refining_impl_trait)]
-    fn station(&self) -> Arc<Station> {self.station.clone()}
+    fn station(&self) -> &'static Station {self.station}
     fn layer(&'a self, layer: Layer) -> Option<LayerHash> {Some(LayerHash {layer, data: self})}
     fn layers(&self) -> Vec<Layer> {
         let mut set = HashSet::new();
@@ -36,7 +36,7 @@ impl<'a> WxEntry<'a, LayerHash<'a>> for HashMapWx {
 
 
 impl HashMapWx {
-    pub fn new(date_time: DateTime<Utc>, station: Arc<Station>) -> HashMapWx {
+    pub fn new(date_time: DateTime<Utc>, station: &'static Station) -> HashMapWx {
         HashMapWx { date_time, station, data: HashMap::new() }
     }
     pub fn put<U: Clone + 'static>(&mut self, layer: Layer, param: Param, data: U) {
@@ -67,7 +67,7 @@ impl<'a> LayerHash<'a> {
 impl<'a> WxEntryLayer for LayerHash<'a> {
     fn layer(&self) -> Layer {self.layer}
     #[allow(refining_impl_trait)]
-    fn station(&self) -> Arc<Station> {self.data.station.clone()}
+    fn station(&self) -> &'static Station {self.data.station}
 
     fn temperature(&self) -> Option<Temperature> {self.get(Param::Temperature)}
     fn pressure(&self) -> Option<Pressure> {self.get(Param::Pressure)}

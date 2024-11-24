@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -9,7 +9,7 @@ use crate::*;
 pub struct WxEntryStruct {
     pub date_time: DateTime<Utc>,
     #[serde(skip_serializing)]
-    pub station: Arc<Station>,
+    pub station: &'static Station,
     pub layers: HashMap<Layer, WxEntryLayerStruct>,
     
     pub skycover: Option<SkyCoverage>,
@@ -24,7 +24,7 @@ pub struct WxEntryStruct {
 impl<'a> WxEntry<'a, &'a WxEntryLayerStruct> for WxEntryStruct {
     fn date_time(&self) -> DateTime<Utc> {self.date_time}
     #[allow(refining_impl_trait)]
-    fn station(&self) -> Arc<Station> {self.station.clone()}
+    fn station(&self) -> &'static Station {self.station}
     #[allow(refining_impl_trait)]
     fn layer(&'a self, layer: Layer) -> Option<&WxEntryLayerStruct> {
         self.layers.get(&layer)
@@ -44,7 +44,7 @@ impl<'a> WxEntry<'a, &'a WxEntryLayerStruct> for WxEntryStruct {
 pub struct WxEntryLayerStruct {
     pub layer: Layer,
     #[serde(skip_serializing)]
-    pub station: Arc<Station>,
+    pub station: &'static Station,
     pub temperature: Option<Temperature>,
     pub pressure: Option<Pressure>,
     pub visibility: Option<Distance>,
@@ -55,24 +55,10 @@ pub struct WxEntryLayerStruct {
 impl<'a> WxEntryLayer for &'a WxEntryLayerStruct {
     fn layer(&self) -> Layer {self.layer}
     #[allow(refining_impl_trait)]
-    fn station(&self) -> Arc<Station> {self.station.clone()}
+    fn station(&self) -> &'static Station {self.station}
     fn temperature(&self) -> Option<Temperature> {self.temperature}
     fn pressure(&self) -> Option<Pressure> {self.pressure}
     fn visibility(&self) -> Option<Distance> {self.visibility}
     fn dewpoint(&self) -> Option<Temperature> {self.dewpoint}
     fn wind(&self) -> Option<Wind> {self.wind}
 }
-
-impl WxEntryStruct {
-    pub fn station_arc(&self) -> Arc<Station> {
-        self.station.clone()
-    }
-}
-
-impl WxEntryLayerStruct {
-    pub fn station_arc(&self) -> Arc<Station> {
-        self.station.clone()
-    }
-}
-
-//

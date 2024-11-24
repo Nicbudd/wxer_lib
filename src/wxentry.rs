@@ -1,5 +1,3 @@
-use std::ops::Deref;
-use std::sync::Arc;
 use std::{collections::HashMap, f32::consts::PI, fmt};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -28,7 +26,7 @@ pub trait WxEntry<'a, L: WxEntryLayer> where Self: fmt::Debug {
 
     // REQUIRED FIELDS ---------------------------------------------------------
     fn date_time(&self) -> DateTime<Utc>;
-    fn station(&self) -> impl StationRef;
+    fn station(&self) -> &'static Station;
     fn layer(&'a self, layer: Layer) -> Option<L>;
     fn layers(&self) -> Vec<Layer>;
     // fn new(station: &Station) -> Self;
@@ -85,17 +83,15 @@ pub trait WxEntry<'a, L: WxEntryLayer> where Self: fmt::Debug {
         self.layer(Indoor)
     }
 
-    fn to_struct(&'a self, arc: Option<Arc<Station>>) -> Result<WxEntryStruct> {
+    fn to_struct(&'a self) -> Result<WxEntryStruct> {
         let mut layers = HashMap::new();
-
-        let station: Arc<Station> = arc.unwrap_or(Arc::new(self.station().deref().clone()));
         
         for layer in self.layers() {
             let layer = self.layer(layer).context("Layer in layers() was not contained in layer(layer).")?;
             
             let l = WxEntryLayerStruct {
                 layer: layer.layer(),
-                station: station.clone(),
+                station: layer.station(),
                 temperature: layer.temperature(),
                 pressure: layer.pressure(),
                 dewpoint: layer.dewpoint(),
@@ -110,7 +106,7 @@ pub trait WxEntry<'a, L: WxEntryLayer> where Self: fmt::Debug {
             altimeter: self.altimeter(),
             cape: self.cape(),
             date_time: self.date_time(),
-            station: station.clone(),
+            station: self.station(),
             layers,
             skycover: self.skycover(),
             wx_codes: self.wx_codes(),
@@ -137,7 +133,7 @@ pub trait WxEntry<'a, L: WxEntryLayer> where Self: fmt::Debug {
 
 pub trait WxEntryLayer {
     fn layer(&self) -> Layer;
-    fn station(&self) -> impl Deref<Target = Station>;
+    fn station(&self) -> &'static Station;
 
     // OPTIONAL FIELDS ---------------------------------------------------------
 
@@ -296,13 +292,11 @@ pub trait WxEntryLayer {
         Some(Wind {direction: self.wind_direction()?, speed: self.wind_speed()?})
     }
 
-    fn to_struct(&self, arc: Option<Arc<Station>>) -> WxEntryLayerStruct {
-        let station: Arc<Station> = arc.unwrap_or(Arc::new(self.station().deref().clone()));
-
+    fn to_struct(&self) -> WxEntryLayerStruct {
         WxEntryLayerStruct {
             dewpoint: self.dewpoint(),
             layer: self.layer(),
-            station: station.clone(),
+            station: self.station(),
             temperature: self.temperature(),
             pressure: self.pressure(),
             visibility: self.visibility(),
@@ -313,15 +307,13 @@ pub trait WxEntryLayer {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use chrono_tz::US::Eastern;
 
     use crate::*;
 
     struct TestLayer {
         layer: Layer,
-        station: Arc<Station>,
+        station: &'static Station,
         temperature: Option<Temperature>, 
         wind_speed: Option<Speed>,
         dewpoint: Option<Temperature>,
@@ -330,16 +322,17 @@ mod tests {
     impl WxEntryLayer for TestLayer {
         fn layer(&self) -> Layer {self.layer}
         #[allow(refining_impl_trait)]
-        fn station(&self) -> Arc<Station> {self.station.clone()}
+        fn station(&self) -> &'static Station {self.station}
     }
 
-    fn default_station() -> Arc<Station> {
-        Arc::new(Station {
+    fn default_station() -> &'static Station {
+        let b = Box::new(Station {
             name: String::from("Test"),
             altitude: Altitude::new(0., Meter),
             coords: (0., 0.).into(),
             time_zone: Eastern,
-        })
+        });
+        Box::leak(b)
     }
 
 

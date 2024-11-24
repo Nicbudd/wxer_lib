@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use derive_more::Display;
 use anyhow::bail;
 use crate::*;
-use std::{fmt::{self, Display, Formatter}, ops::Deref, sync::Arc};
+use std::fmt::{self, Display, Formatter};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Station {
@@ -14,39 +14,50 @@ pub struct Station {
     pub time_zone: Tz,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StaticStation {
-    pub name: &'static str,
-    pub altitude: Altitude,
-    pub coords: (f32, f32),
-    pub time_zone: Tz,
-}
-
-impl From<StaticStation> for Station {
-    fn from(value: StaticStation) -> Station {
+impl Default for Station {
+    fn default() -> Self {
         Station { 
-            name: value.name.into(), 
-            altitude: value.altitude, 
-            coords: value.coords.into(), 
-            time_zone: value.time_zone, 
+            name: "NULL Island".into(),
+            altitude: Altitude::new(0.0, Meter), 
+            coords: (0.0,0.0).into(), 
+            time_zone: Tz::UTC 
         }
     }
 }
 
-pub trait StationRef: Deref<Target = Station> {}
+// #[derive(Clone, Debug, Serialize, Deserialize)]
+// pub struct StaticStation {
+//     pub name: &'static str,
+//     pub altitude: Altitude,
+//     pub coords: (f32, f32),
+//     pub time_zone: Tz,
+// }
 
-impl StationRef for &Station {}
-impl StationRef for Arc<Station> {}
+// impl From<StaticStation> for Station {
+//     fn from(value: StaticStation) -> Station {
+//         Station { 
+//             name: value.name.into(), 
+//             altitude: value.altitude, 
+//             coords: value.coords.into(), 
+//             time_zone: value.time_zone, 
+//         }
+//     }
+// }
 
-impl StationRef for StaticStation {}
-impl Deref for StaticStation {
-    type Target = Station;
-    fn deref(&self) -> &Station {
-        let s: Station = StaticStation::into(self.clone());
-        // let a: Arc<Station> = Arc::new(s);
-        s
-    }
-}
+// pub trait StationRef: Deref<Target = Station> {}
+
+// impl StationRef for &Station {}
+// impl StationRef for Arc<Station> {}
+
+// impl StationRef for StaticStation {}
+// impl Deref for StaticStation {
+//     type Target = Station;
+//     fn deref(&self) -> &Station {
+//         let s: Station = StaticStation::into(self.clone());
+//         // let a: Arc<Station> = Arc::new(s);
+//         s
+//     }
+// }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Coordinates {
@@ -239,19 +250,19 @@ pub struct Wx {
     
     pub visibility_inhibitor: bool,
     
-    #[serde(skip_serializing_if = "Intensity::is_none")]
+    // #[serde(skip_serializing_if = "Intensity::is_none")]
     pub rain: Intensity,
-    #[serde(skip_serializing_if = "Intensity::is_none")]
+    // #[serde(skip_serializing_if = "Intensity::is_none")]
     pub snow: Intensity,
-    #[serde(skip_serializing_if = "Intensity::is_none")]
+    // #[serde(skip_serializing_if = "Intensity::is_none")]
     pub falling_ice: Intensity,    
-    #[serde(skip_serializing_if = "Intensity::is_none")]
+    // #[serde(skip_serializing_if = "Intensity::is_none")]
     pub dust: Intensity,
-    #[serde(skip_serializing_if = "Intensity::is_none")]
+    // #[serde(skip_serializing_if = "Intensity::is_none")]
     pub sand: Intensity,
-    #[serde(skip_serializing_if = "Intensity::is_none")]
+    // #[serde(skip_serializing_if = "Intensity::is_none")]
     pub funnel_cloud: Intensity, // light: FC, heavy: Tornado
-    #[serde(skip_serializing_if = "Intensity::is_none")]
+    // #[serde(skip_serializing_if = "Intensity::is_none")]
     pub unknown: Intensity, // light: FC, heavy: Tornado
 }
 

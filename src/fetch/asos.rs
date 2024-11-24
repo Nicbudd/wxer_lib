@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 
 use crate::*;
 use crate::Layer::*;
@@ -8,7 +8,7 @@ use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::Deserialize;
 use anyhow::{bail, Result};
 
-pub async fn import(station_name: &str, network: &str, station: Arc<Station>) -> Result<db::StationData> {
+pub async fn import(station_name: &str, network: &str, station: &'static Station) -> Result<db::StationData> {
     let url = format!("http://mesonet.agron.iastate.edu/json/current.py?station={}&network={}", station_name, network);
 
     //dbg!(&url);
@@ -38,23 +38,45 @@ pub async fn import(station_name: &str, network: &str, station: Arc<Station>) ->
     let direction = ob.winddirectiondeg.map(|x| Direction::from_degrees(x as u16).ok()).flatten();
 
     wx_entry.put(All, Param::SkyCover, skycover_from_vecs(ob.skycover, ob.skylevel)?);
-    wx_entry.put(All, Param::WindDirection, direction);
-    wx_entry.put(All, Param::PrecipToday, precip_today);
-    wx_entry.put(All, Param::RawMetar, ob.raw);
-    wx_entry.put(All, Param::WxCodes, ob.present_wx);
 
-    wx_entry.put(NearSurface, Param::Temperature, ob.airtempF.map(|x| {Temperature::new(x, Fahrenheit)}));
-    wx_entry.put(NearSurface, Param::Dewpoint, ob.dewpointtempF.map(|x| {Temperature::new(x, Fahrenheit)}));
-    wx_entry.put(NearSurface, Param::WindSpeed, ob.windspeedkt.map(|x| {Speed::new(x, Knots)}));
-    wx_entry.put(NearSurface, Param::WindDirection, ob.winddirectiondeg.map(|x| {Speed::new(x, Knots)}));
-    wx_entry.put(NearSurface, Param::Altimeter, ob.altimeterin.map(|x| {Pressure::new(x, InHg)}));
-    wx_entry.put(NearSurface, Param::Visibility, ob.visibilitymile.map(|x| {Distance::new(x, Mile)}));
-    
-    wx_entry.put(SeaLevel, Param::Pressure, ob.altimeterin.map(|x| {Pressure::new(x, Mbar)}));
-    
+    if let Some(x) = direction {
+        wx_entry.put(All, Param::WindDirection, x);
+    }
+    if let Some(x) = precip_today{
+        wx_entry.put(All, Param::PrecipToday, x);
+    }
+    if let Some(x) = ob.raw {
+        wx_entry.put(All, Param::RawMetar, x);
+    }
+    if let Some(x) = ob.present_wx {
+        wx_entry.put(All, Param::WxCodes, x);
+    }
+
+    if let Some(x) = ob.airtempF{
+        wx_entry.put(NearSurface, Param::Temperature, Temperature::new(x, Fahrenheit));
+    }
+    if let Some(x) = ob.dewpointtempF {
+        wx_entry.put(NearSurface, Param::Dewpoint, Temperature::new(x, Fahrenheit));
+    }
+    if let Some(x) = ob.windspeedkt {
+        wx_entry.put(NearSurface, Param::WindSpeed, Speed::new(x, Knots));
+    }
+    if let Some(x) = ob.winddirectiondeg {
+        wx_entry.put(NearSurface, Param::WindDirection,Speed::new(x, Knots));
+    }
+    if let Some(x) = ob.altimeterin {
+        wx_entry.put(NearSurface, Param::Altimeter, Pressure::new(x, InHg));
+    }
+    if let Some(x) = ob.visibilitymile {
+        wx_entry.put(NearSurface, Param::Visibility, Distance::new(x, Mile));
+    }
+    if let Some(x) = ob.altimeterin {
+        wx_entry.put(SeaLevel, Param::Pressure,  Pressure::new(x, Mbar));
+    }
+
     let mut asos_db = BTreeMap::new();
 
-    asos_db.insert(dt, wx_entry.to_struct(station)?);
+    asos_db.insert(dt, wx_entry.to_struct()?);
 
     Ok(asos_db)
 }

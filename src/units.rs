@@ -17,8 +17,8 @@ pub use hidden::*;
 mod hidden {
     use std::fmt;
     use std::ops::{Add, Div, Mul, Sub};
-    use serde::{ser, Serializer};
-    use serde::{Deserialize, ser::SerializeStruct, Serialize};
+    use serde::{Serializer, ser::SerializeStruct};
+    use serde::{Deserialize, Serialize};
     use strum_macros::Display;
     use anyhow::{bail, Result};
     use super::*;
@@ -172,8 +172,10 @@ mod hidden {
     #[allow(unused)]
     pub enum SpecEnergyUnit {
         #[strum(to_string = "J/kg")]
+        #[serde(rename = "J/kg")]
         Jkg, 
         #[strum(to_string = "m^2/s^2")]
+        #[serde(rename = "m^2/s^2")]
         M2s2, 
     }
     pub use SpecEnergyUnit::*;
@@ -235,10 +237,13 @@ mod hidden {
     #[allow(unused)]
     pub enum PrecipUnit {
         #[strum(to_string = "mm")]
+        #[serde(rename = "mm")]
         Mm, 
         #[strum(to_string = "in")]
+        #[serde(rename = "in")]
         Inch, 
         #[strum(to_string = "cm")]
+        #[serde(rename = "cm")]
         Cm, 
     }
     pub use PrecipUnit::*;
@@ -261,10 +266,13 @@ mod hidden {
     #[allow(unused)]
     pub enum FractionalUnit {
         #[strum(to_string = "%")]
+        #[serde(rename = "%")]
         Percent, 
         #[strum(to_string = "")]
+        #[serde(rename = "")]
         Decimal, 
         #[strum(to_string = "1/1000")]
+        #[serde(rename = "1/1000")]
         Milli, 
     }
     pub use FractionalUnit::*;
@@ -340,11 +348,18 @@ mod hidden {
     // DIRECTION ---------------------------------------------------------------
     // does not use the standard unit trait
 
-    #[derive(Debug, Clone, Copy, Serialize, derive_more::Display)]
-    pub struct Direction(
-        #[serde(serialize_with = "serialize_cardinal")]
-        u16
-    ); 
+    #[derive(Debug, Clone, Copy, derive_more::Display)]
+    pub struct Direction(u16); 
+
+    impl Serialize for Direction {
+        fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+            where S: Serializer {
+            let mut dir = serializer.serialize_struct("Direction", 2)?;
+            dir.serialize_field("degrees", &self.0)?;
+            dir.serialize_field("cardinal", self.cardinal())?;
+            dir.end()
+        }
+    }
 
     fn int_to_cardinal(n: u16) -> Option<&'static str> {
          match n {
@@ -368,14 +383,14 @@ mod hidden {
         }
     }
 
-    fn serialize_cardinal<S>(n: &u16, s: S) -> Result::<S::Ok, S::Error> where S: Serializer {
+    // fn serialize_cardinal<S>(n: &u16, s: S) -> Result::<S::Ok, S::Error> where S: Serializer {
 
-        if let Some(strr) = int_to_cardinal(*n) {
-            s.serialize_str(strr)
-        } else {
-            Err(ser::Error::custom("Invalid cardinal value"))
-        }
-    }
+    //     if let Some(strr) = int_to_cardinal(*n) {
+    //         s.serialize_str(strr)
+    //     } else {
+    //         Err(ser::Error::custom("Invalid cardinal value"))
+    //     }
+    // }
 
     impl Direction {
         fn sanitize_degrees(degrees: u16) -> Result<u16> {
@@ -396,25 +411,7 @@ mod hidden {
         }
 
         pub fn cardinal(&self) -> &'static str {
-            match self.0 {
-                350 | 0 | 10 => "N",
-                20 | 30 => "NNE",
-                40 | 50 => "NE",
-                60 | 70 => "ENE",
-                80 | 90 | 100 => "E",
-                110 | 120 => "ESE",
-                130 | 140 => "SE",
-                150 | 160 => "SSE",
-                170 | 180 | 190 => "S",
-                200 | 210 => "SSW",
-                220 | 230 => "SW",
-                240 | 250 => "WSW",
-                260 | 270 | 280 => "W",
-                290 | 300 => "WNW",
-                310 | 320 => "NW",            
-                330 | 340 => "NNW",
-                _ => unreachable!("Direction struct contained {}, which is invalid.", self.0)
-            }
+            int_to_cardinal(self.0).expect("Did not find a rounded cardinal degree")
         }
 
         pub fn degrees(&self) -> u16 {

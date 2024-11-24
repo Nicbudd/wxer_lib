@@ -1,9 +1,7 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Timelike, Utc};
 use anyhow::Result;
-use chrono_tz::US::Eastern;
 use serde::Deserialize;
 
 use crate::*;
@@ -16,14 +14,7 @@ use crate::Layer::*;
 
 // station URL is going to be something like http://rpi_address:8000
 // todo: better name for rpi station
-pub async fn import(station_url: &str, date: DateTime<Utc>, station: Arc<Station>) -> Result<db::StationData> {
-
-    // let station_data_url = format!("{station_url}/location.json");
-
-    // use this later
-    // let station = reqwest::get(station_data_url)
-    //     .await?
-    //     .text().await?;
+pub async fn import(station_url: &str, date: DateTime<Utc>, station: &'static Station) -> Result<db::StationData> {
 
     let url = format!("{station_url}/{}.csv", date.format("%Y-%m-%d").to_string());
     let resp: String = reqwest::get(url)
@@ -40,9 +31,12 @@ pub async fn import(station_url: &str, date: DateTime<Utc>, station: Arc<Station
     let mut local_db = BTreeMap::new();
 
     for (i, record) in reader.deserialize().enumerate() {
-        match try_parse_entry(record) {
-            Ok((dt, entry)) => {local_db.insert(dt, entry.to_struct()?);},
-            Err(e) => {eprintln!("Error parsing entry {i}: {e}");}
+        match try_parse_entry(record, station) {
+            Ok((dt, entry)) => {
+                let entry_struct = entry.to_struct()?;
+                local_db.insert(dt, entry_struct);
+            },
+            Err(e) => {println!("Error parsing entry {i}: {e}");}
         }
     } 
 
@@ -51,27 +45,31 @@ pub async fn import(station_url: &str, date: DateTime<Utc>, station: Arc<Station
     Ok(local_db)
 }
 
-fn try_parse_entry(record: Result<RaspPiEntry, csv::Error>) -> Result<(DateTime<Utc>, HashMapWx)> {
+fn try_parse_entry(record: Result<RaspPiEntry, csv::Error>, station: &'static Station) -> Result<(DateTime<Utc>, HashMapWx)> {
     let record: RaspPiEntry = record?;
 
     let time_string = String::from(record.time.clone()) + "Z";
     let mut dt = time_string.trim().chars().filter(|x| x != &'\0').collect::<String>().parse::<DateTime<Utc>>()?;
     dt = dt - Duration::seconds(dt.second() as i64 + 60); // to account for when the data collection ends
 
-    let station: Station = Station { 
-        name: "RPI@ValentineHouse".into(), 
-        altitude: Altitude::new(4.8, Meter), 
-        coords: (43.13, -70.92).into(), 
-        time_zone: Eastern,
-    };
-
     let mut wx = HashMapWx::new(dt, station);
 
-    wx.put(Indoor, Param::Temperature, record.indoor_temp);
-    wx.put(NearSurface, Param::Temperature, record.outdoor_temp);
-    wx.put(NearSurface, Param::Dewpoint, record.dewpoint);
-    wx.put(NearSurface, Param::Pressure, record.raw_pres);
-    wx.put(Indoor, Param::Pressure, record.raw_pres);
+    if let Some(x) = record.indoor_temp {
+        wx.put(Indoor, Param::Temperature, Temperature::new(x, Fahrenheit));
+    }
+
+    if let Some(x) = record.outdoor_temp {
+        wx.put(NearSurface, Param::Temperature, Temperature::new(x, Fahrenheit));
+    }
+
+    if let Some(x) = record.dewpoint {
+        wx.put(NearSurface, Param::Dewpoint, Temperature::new(x, Fahrenheit));
+    }
+
+    if let Some(x) = record.raw_pres {
+        wx.put(NearSurface, Param::Pressure, Pressure::new(x, Mbar));
+        wx.put(Indoor, Param::Pressure, Pressure::new(x, Mbar));
+    }
     
     Ok((dt, wx))
 }
