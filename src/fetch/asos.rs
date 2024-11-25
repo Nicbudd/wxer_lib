@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 
 use crate::*;
 use crate::Layer::*;
+#[allow(unused)]
+use log::{error, warn, info, debug, trace};
 // use crate::{db::StationData, ignore_none, CloudLayer, Direction, Layer, Precip, SkyCoverage, Station, WxEntry, WxEntryLayer};
 
 use chrono::{DateTime, Duration, Timelike, Utc};
@@ -62,7 +64,12 @@ pub async fn import(station_name: &str, network: &str, station: &'static Station
         wx_entry.put(NearSurface, Param::WindSpeed, Speed::new(x, Knots));
     }
     if let Some(x) = ob.winddirectiondeg {
-        wx_entry.put(NearSurface, Param::WindDirection,Direction::from_degrees(x as u16).ok());
+        let dir = Direction::from_degrees(x as u16);
+        if let Ok(y) = dir {
+            wx_entry.put(NearSurface, Param::WindDirection, y);
+        } else {
+            warn!("{} ASOS: Failed to convert {x} into degrees", station_name)
+        }
     }
     if let Some(x) = ob.altimeterin {
         wx_entry.put(NearSurface, Param::Altimeter, Pressure::new(x, InHg));
@@ -75,8 +82,9 @@ pub async fn import(station_name: &str, network: &str, station: &'static Station
     }
 
     let mut asos_db = BTreeMap::new();
-
+    
     asos_db.insert(dt, wx_entry.to_struct()?);
+
 
     Ok(asos_db)
 }
