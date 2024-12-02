@@ -168,7 +168,7 @@ mod hidden {
     // SPECIFIC ENERGY ---------------------------------------------------------
     pub type SpecEnergy = ProportionalUnit<SpecEnergyUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum SpecEnergyUnit {
         #[strum(to_string = "J/kg")]
@@ -233,7 +233,7 @@ mod hidden {
     // PRECIP AMOUNT -----------------------------------------------------------
     pub type PrecipAmount = ProportionalUnit<PrecipUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum PrecipUnit {
         #[strum(to_string = "mm")]
@@ -262,7 +262,7 @@ mod hidden {
     // PERCENTAGE -----------------------------------------------------------
     pub type Fraction = ProportionalUnit<FractionalUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum FractionalUnit {
         #[strum(to_string = "%")]
@@ -291,7 +291,7 @@ mod hidden {
     // TEMPERATURE -------------------------------------------------------------
     // Not a proportional unit
 
-    #[derive(Clone, Copy, Debug, Serialize)]
+    #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
     pub struct Temperature {
         value: f32,
         unit: TemperatureUnit
@@ -348,14 +348,16 @@ mod hidden {
     // DIRECTION ---------------------------------------------------------------
     // does not use the standard unit trait
 
-    #[derive(Debug, Clone, Copy, derive_more::Display)]
-    pub struct Direction(u16); 
+    #[derive(Debug, Deserialize, Clone, Copy, derive_more::Display)]
+    pub struct Direction {
+        degrees: u16
+    }
 
     impl Serialize for Direction {
         fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
             where S: Serializer {
             let mut dir = serializer.serialize_struct("Direction", 2)?;
-            dir.serialize_field("degrees", &self.0)?;
+            dir.serialize_field("degrees", &self.degrees)?;
             dir.serialize_field("cardinal", self.cardinal())?;
             dir.end()
         }
@@ -407,15 +409,15 @@ mod hidden {
 
         pub fn from_degrees(degrees: u16) -> Result<Direction> {
             let corrected_degrees = Direction::sanitize_degrees(degrees)?;
-            Ok(Direction(corrected_degrees))
+            Ok(Direction{degrees: corrected_degrees})
         }
 
         pub fn cardinal(&self) -> &'static str {
-            int_to_cardinal(self.0).expect("Did not find a rounded cardinal degree")
+            int_to_cardinal(self.degrees).expect("Did not find a rounded cardinal degree")
         }
 
         pub fn degrees(&self) -> u16 {
-            self.0
+            self.degrees
         } 
     }
 

@@ -58,8 +58,12 @@ pub async fn import(station_name: &str, network: &str, station: &'static Station
         wx_entry.put(NearSurface, Param::Temperature, Temperature::new(x, Fahrenheit));
     }
     if let Some(x) = ob.dewpointtempF {
+        // debug!("{} ASOS: Converted dewpoint successfully", station_name);
         wx_entry.put(NearSurface, Param::Dewpoint, Temperature::new(x, Fahrenheit));
+    } else {
+        // warn!("{} ASOS: Could not insert dewpoint", station_name)
     }
+
     if let Some(x) = ob.windspeedkt {
         wx_entry.put(NearSurface, Param::WindSpeed, Speed::new(x, Knots));
     }
@@ -169,7 +173,8 @@ fn skycover_from_vecs(cover: Vec<Option<String>>, level: Vec<Option<u32>>) -> Re
     for l in cover.iter().zip(level.iter()) {
         match l {
             (Some(s), Some(l)) => {
-                let layer_option = CloudLayer::from_code(s, *l)?;
+                let altitude = Altitude::new(*l as f32,Feet);
+                let layer_option = CloudLayer::from_code(s, altitude)?;
 
                 if let Some(layer) = layer_option {
                     skyc.push(layer)

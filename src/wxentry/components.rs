@@ -92,7 +92,7 @@ pub enum Param {
 
 // LAYER
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Layer {
     All,
     Indoor,
@@ -138,7 +138,7 @@ impl Layer {
 }
 
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Wind {
     pub direction: Direction, // stored as degrees
     pub speed: Speed,
@@ -151,15 +151,19 @@ impl Display for Wind {
 }
 
 
-#[derive(Serialize, Debug, Clone, Copy, Display, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq)]
 pub enum CloudLayerCoverage {
     #[display(fmt = "FEW")]
+    #[serde(rename = "FEW")]
     Few,
     #[display(fmt = "SCT")]
+    #[serde(rename = "SCT")]
     Scattered,
     #[display(fmt = "BKN")]
+    #[serde(rename = "BKN")]
     Broken,
     #[display(fmt = "OVC")]
+    #[serde(rename = "OVC")]
     Overcast
 }
 
@@ -175,14 +179,14 @@ impl CloudLayerCoverage {
 }
 
 
-#[derive(Serialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct CloudLayer {
     pub coverage: CloudLayerCoverage,
-    pub height: u32, // given in feet
+    pub height: Altitude, // given in feet
 }
 
 impl CloudLayer {   
-    pub fn from_code(code: &str, height: u32) -> Result<Option<CloudLayer>> {
+    pub fn from_code(code: &str, height: Altitude) -> Result<Option<CloudLayer>> {
         let coverage_opt = match code {
             "SKC" => None,
             "CLR" => None,
@@ -206,7 +210,7 @@ impl fmt::Display for CloudLayer {
     }
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum SkyCoverage {
     Clear,
@@ -224,7 +228,7 @@ impl fmt::Display for SkyCoverage {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Precip {
     pub unknown: PrecipAmount,
     pub rain: PrecipAmount,
@@ -238,7 +242,7 @@ impl Display for Precip {
 }
 
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Wx { 
     pub blowing: bool,
     pub freezing: bool,
@@ -366,7 +370,7 @@ impl Wx {
     }
 }
 
-#[derive(Debug, Copy, Clone, Serialize, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub enum Intensity {
     None,
     Nearby,

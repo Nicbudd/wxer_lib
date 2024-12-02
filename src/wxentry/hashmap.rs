@@ -74,28 +74,28 @@ impl<'a> WxEntryLayer for LayerHash<'a> {
     fn visibility(&self) -> Option<Distance> {self.get(Param::Visibility)}
 
     fn dewpoint(&self) -> Option<Temperature> {
-        self.get(Param::Dewpoint).or({
+        self.get(Param::Dewpoint).or_else(|| {
             Some(dewpoint_from_rh(self.get(Param::Temperature)?, self.get(Param::RelativeHumidity)?))
         })
     }
     fn relative_humidity(&self) -> Option<Fraction> {
-        self.get(Param::RelativeHumidity).or({
+        self.get(Param::RelativeHumidity).or_else(|| {
             Some(rh_from_dewpoint(self.get(Param::Temperature)?, self.get(Param::Dewpoint)?))
         })
     }
 
     fn wind_speed(&self) -> Option<Speed> {
-        self.get(Param::WindSpeed).or(
+        self.get(Param::WindSpeed).or_else(||
             Some(self.get::<Wind>(Param::Wind)?.speed)
         )
     }
     fn wind_direction(&self) -> Option<Direction> {
-        self.get(Param::WindDirection).or(
+        self.get(Param::WindDirection).or_else(||
             Some(self.get::<Wind>(Param::Wind)?.direction)
         )
     }
     fn wind(&self) -> Option<Wind> {
-        self.get(Param::Wind).or(
+        self.get(Param::Wind).or_else(||
             Some(Wind {direction: self.get(Param::WindDirection)?, speed: self.get(Param::WindSpeed)?})
         )
     }

@@ -6,13 +6,49 @@ use serde::{Deserialize, Serialize};
 
 use crate::*;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "Station")] 
+#[serde(into = "Station")] 
+pub enum PotentiallyStaticStation {
+    // Nothing
+    Static(&'static Station),
+    Unstatic(Station)
+}
+
+impl From<Station> for PotentiallyStaticStation {
+    fn from(value: Station) -> Self {
+        Self::Unstatic(value)
+    }
+}
+
+impl From<PotentiallyStaticStation> for Station {
+    fn from(value: PotentiallyStaticStation) -> Self {
+        match value {
+            PotentiallyStaticStation::Static(s) => s.clone(),
+            PotentiallyStaticStation::Unstatic(s) => s,
+        }
+    }
+}
+
+impl From<PotentiallyStaticStation> for &'static Station {
+    fn from(value: PotentiallyStaticStation) -> Self {
+        match value {
+            PotentiallyStaticStation::Static(s) => s,
+            PotentiallyStaticStation::Unstatic(u) => {Box::leak(Box::new(u))}
+        }
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WxAll {
     // #[serde(skip_serializing)]
     pub date_time: DateTime<Utc>,
-    pub date_time_local: DateTime<Tz>,
-    #[serde(skip_serializing)]
-    pub station: &'static Station,
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub date_time_local: Option<DateTime<Tz>>,
+    // #[serde(skip_serializing)]
+    pub station: PotentiallyStaticStation,
+
     pub layers: HashMap<Layer, WxAllLayer>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -36,12 +72,12 @@ pub struct WxAll {
     pub best_slp: Option<Pressure>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WxAllLayer {
-    #[serde(skip_serializing)]
+    // #[serde(skip_serializing)]
     layer: Layer,
-    #[serde(skip_serializing)]
-    station: &'static Station,
+    // #[serde(skip)]
+    station: PotentiallyStaticStation,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<Temperature>,
@@ -103,7 +139,7 @@ impl WxAll {
         for (layer, s) in &wx.layers {
             let l = WxAllLayer { 
                 layer: *layer,
-                station: s.station(), 
+                station: s.station().clone().into(), 
                 temperature: s.temperature().map(|x| x.convert(units.temperature)), 
                 pressure: s.pressure().map(|x| x.convert(units.pressure)), 
                 visibility: s.visibility().map(|x| x.convert(units.distance)), 
@@ -125,8 +161,8 @@ impl WxAll {
 
         WxAll { 
             date_time: wx.date_time(), 
-            date_time_local: wx.date_time_local(), 
-            station: wx.station(), 
+            date_time_local: Some(wx.date_time_local()), 
+            station: PotentiallyStaticStation::Static(wx.station()), 
             layers, 
             skycover: wx.skycover(), 
             wx_codes: wx.wx_codes(), 
@@ -144,7 +180,7 @@ impl WxAll {
 impl<'a> WxEntry<'a, &'a WxAllLayer> for WxAll {
     fn date_time(&self) -> chrono::DateTime<chrono::Utc> {self.date_time}
     #[allow(refining_impl_trait)]
-    fn station(&self) -> &'static Station {self.station}
+    fn station(&self) -> &'static Station {self.station.clone().into()}
     fn layer(&'a self, layer: Layer) -> Option<&WxAllLayer> {self.layers.get(&layer)}
     fn layers(&self) -> Vec<Layer> {self.layers.iter().map(|x| x.0.to_owned()).collect()}
 
@@ -160,7 +196,7 @@ impl<'a> WxEntry<'a, &'a WxAllLayer> for WxAll {
 impl<'a> WxEntryLayer for &'a WxAllLayer {
     fn layer(&self) -> Layer {self.layer}
     #[allow(refining_impl_trait)]
-    fn station(&self) -> &'static Station {self.station}
+    fn station(&self) -> &'static Station {self.station.clone().into()}
 
     fn temperature(&self) -> Option<Temperature> {self.temperature}
     fn pressure(&self) -> Option<Pressure> {self.pressure}
