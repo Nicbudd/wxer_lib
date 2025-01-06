@@ -101,7 +101,7 @@ pub async fn import(station_name: &str, network: &str, station: &'static Station
     let mut asos_db = BTreeMap::new();
     
     let as_struct = wx_entry.to_struct()?;
-    dbg!(&as_struct);
+    // dbg!(&as_struct);
 
     asos_db.insert(date_time, as_struct);
 
