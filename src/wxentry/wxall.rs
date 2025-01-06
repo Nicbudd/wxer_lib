@@ -6,12 +6,25 @@ use serde::{Deserialize, Serialize};
 
 use crate::*;
 
+#[derive(Debug, Serialize)]
+pub struct DataWithStation<'a, T: Serialize> {
+    pub station: &'a Station,
+    pub data: T
+}
+
+
+#[derive(Debug, Deserialize)]
+pub struct DataWithStationDeserialize<T> {
+    pub station: Station,
+    pub data: T
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct WxAll {
     // #[serde(skip_serializing)]
     pub date_time: DateTime<Utc>,
     pub date_time_local: DateTime<Tz>,
-    #[serde(skip_serializing)]
+    // #[serde(skip_serializing)]
     pub station: &'static Station,
     pub layers: HashMap<Layer, WxAllLayer>,
 
@@ -38,9 +51,9 @@ pub struct WxAll {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WxAllLayer {
-    #[serde(skip_serializing)]
+    // #[serde(skip_serializing)]
     layer: Layer,
-    #[serde(skip_serializing)]
+    // #[serde(skip_serializing)]
     station: &'static Station,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -50,7 +63,7 @@ pub struct WxAllLayer {
     #[serde(skip_serializing_if = "Option::is_none")]
     visibility: Option<Distance>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    wind: Option<Wind>,
+    wind: Option<WindExpanded>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     dewpoint: Option<Temperature>,
@@ -108,7 +121,11 @@ impl WxAll {
                 pressure: s.pressure().map(|x| x.convert(units.pressure)), 
                 visibility: s.visibility().map(|x| x.convert(units.distance)), 
                 wind: s.wind().map(|wind|
-                        Wind {speed: wind.speed.convert(units.speed), direction: wind.direction}),
+                        Wind {
+                            speed: wind.speed.convert(units.speed), 
+                            direction: wind.direction
+                        }.into()
+                    ),
                 dewpoint: s.dewpoint().map(|x| x.convert(units.temperature)), 
                 relative_humidity: s.relative_humidity().map(|x| x.convert(Percent)), 
                 projected_slp: s.slp().map(|x| x.convert(units.pressure)), 
@@ -122,8 +139,7 @@ impl WxAll {
             layers.insert(*layer, l);
         }
 
-
-        WxAll { 
+        let wx = WxAll { 
             date_time: wx.date_time(), 
             date_time_local: wx.date_time_local(), 
             station: wx.station(), 
@@ -137,7 +153,9 @@ impl WxAll {
             altimeter: wx.altimeter(), 
             cape: wx.cape(), 
             best_slp: wx.best_slp().map(|x| x.convert(units.pressure))
-        }
+        };
+        
+        wx
     }
 }
 
@@ -165,7 +183,33 @@ impl<'a> WxEntryLayer for &'a WxAllLayer {
     fn temperature(&self) -> Option<Temperature> {self.temperature}
     fn pressure(&self) -> Option<Pressure> {self.pressure}
     fn visibility(&self) -> Option<Distance> {self.visibility}
-    fn wind(&self) -> Option<Wind> {self.wind}
+    fn wind(&self) -> Option<Wind> {Some(self.wind.clone()?.into())}
 
     fn dewpoint(&self) -> Option<Temperature> {self.dewpoint}
+}
+
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindExpanded {
+    pub direction: DirectionExpanded,
+    pub speed: Speed,
+}
+
+impl From<Wind> for WindExpanded {
+    fn from(value: Wind) -> Self {
+        WindExpanded { 
+            direction: value.direction.into(), 
+            speed: value.speed 
+        }
+    }
+}
+
+impl From<WindExpanded> for Wind {
+    fn from(value: WindExpanded) -> Self {
+        Wind { 
+            direction: value.direction.into(), 
+            speed: value.speed 
+        }
+    }
 }

@@ -17,7 +17,7 @@ pub use hidden::*;
 mod hidden {
     use std::fmt;
     use std::ops::{Add, Div, Mul, Sub};
-    use serde::{Serializer, ser::SerializeStruct};
+    use serde::ser::SerializeStruct;
     use serde::{Deserialize, Serialize};
     use strum_macros::Display;
     use anyhow::{bail, Result};
@@ -96,6 +96,7 @@ mod hidden {
     // UNITS -------------------------------------------------------------------
 
     // WIND ----------------------------------------------------------------
+    // #[derive(Deserialize)]
     pub type Speed = ProportionalUnit<SpeedUnit>;
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
@@ -168,7 +169,7 @@ mod hidden {
     // SPECIFIC ENERGY ---------------------------------------------------------
     pub type SpecEnergy = ProportionalUnit<SpecEnergyUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum SpecEnergyUnit {
         #[strum(to_string = "J/kg")]
@@ -233,7 +234,7 @@ mod hidden {
     // PRECIP AMOUNT -----------------------------------------------------------
     pub type PrecipAmount = ProportionalUnit<PrecipUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum PrecipUnit {
         #[strum(to_string = "mm")]
@@ -262,7 +263,7 @@ mod hidden {
     // PERCENTAGE -----------------------------------------------------------
     pub type Fraction = ProportionalUnit<FractionalUnit>;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Serialize, Deserialize)]
     #[allow(unused)]
     pub enum FractionalUnit {
         #[strum(to_string = "%")]
@@ -291,7 +292,7 @@ mod hidden {
     // TEMPERATURE -------------------------------------------------------------
     // Not a proportional unit
 
-    #[derive(Clone, Copy, Debug, Serialize)]
+    #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
     pub struct Temperature {
         value: f32,
         unit: TemperatureUnit
@@ -348,18 +349,40 @@ mod hidden {
     // DIRECTION ---------------------------------------------------------------
     // does not use the standard unit trait
 
-    #[derive(Debug, Clone, Copy, derive_more::Display)]
+    #[derive(Debug, Clone, Copy, derive_more::Display, Serialize, Deserialize)]
     pub struct Direction(u16); 
 
-    impl Serialize for Direction {
-        fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-            where S: Serializer {
-            let mut dir = serializer.serialize_struct("Direction", 2)?;
-            dir.serialize_field("degrees", &self.0)?;
-            dir.serialize_field("cardinal", self.cardinal())?;
-            dir.end()
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct DirectionExpanded {
+        degrees: u16,
+        cardinal: String,
+    }    
+
+    impl From<Direction> for DirectionExpanded {
+        fn from(value: Direction) -> Self {
+            DirectionExpanded { 
+                degrees: value.0, 
+                cardinal: value.cardinal().to_string() 
+            }
         }
     }
+
+    impl From<DirectionExpanded> for Direction {
+        fn from(value: DirectionExpanded) -> Self {
+            Direction(value.degrees)
+        }
+    }
+
+
+    // impl Serialize for Direction {
+    //     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    //         where S: Serializer {
+    //         let mut dir = serializer.serialize_struct("Direction", 2)?;
+    //         dir.serialize_field("degrees", &self.0)?;
+    //         dir.serialize_field("cardinal", self.cardinal())?;
+    //         dir.end()
+    //     }
+    // }
 
     fn int_to_cardinal(n: u16) -> Option<&'static str> {
          match n {

@@ -13,6 +13,9 @@ pub use components::Layer::*;
 mod entry_struct;
 pub use entry_struct::*;
 
+mod entry_deser;
+pub use entry_deser::*;
+
 mod wxall;
 pub use wxall::*;
 
@@ -91,7 +94,7 @@ pub trait WxEntry<'a, L: WxEntryLayer> where Self: fmt::Debug {
             
             let l = WxEntryLayerStruct {
                 layer: layer.layer(),
-                station: layer.station(),
+                station: self.station(),
                 temperature: layer.temperature(),
                 pressure: layer.pressure(),
                 dewpoint: layer.dewpoint(),
@@ -293,7 +296,7 @@ pub trait WxEntryLayer {
     }
 
     fn to_struct(&self) -> WxEntryLayerStruct {
-        WxEntryLayerStruct {
+        let l = WxEntryLayerStruct {
             dewpoint: self.dewpoint(),
             layer: self.layer(),
             station: self.station(),
@@ -301,7 +304,9 @@ pub trait WxEntryLayer {
             pressure: self.pressure(),
             visibility: self.visibility(),
             wind: self.wind()
-        }
+        };
+        
+        l
     } 
 }
 

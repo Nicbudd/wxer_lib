@@ -1,38 +1,15 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::Deserialize;
 
 use crate::*;
 
-// // starting to think this is a bad idea...
-// #[derive(Debug, Clone, Serialize)]
-// enum StationPotentialReference {
-//     Owned(Station),
-//     Reference(&'static Station)
-// }
-
-// impl StationPotentialReference {
-//     fn get_ref(&self) -> &'static Station {
-//         match self {
-//             Self::Reference(r) => r,
-//             Self::Owned(s) => Box::leak(Box::new(s.clone()))
-//         }
-//     }
-//     fn get_owned(self) -> Station {
-//         match self {
-//             Self::Owned(s) => s,
-//             Self::Reference(r) => r.clone()
-//         }
-//     }
-// }
-
-#[derive(Debug, Clone, Serialize)]
-pub struct WxEntryStruct {
+#[derive(Debug, Clone, Deserialize)]
+pub struct WxStructDeserialized {
     pub date_time: DateTime<Utc>,
-    #[serde(skip_serializing)]
-    pub station: &'static Station,
-    pub layers: HashMap<Layer, WxEntryLayerStruct>,
+    pub station: Station,
+    pub layers: HashMap<Layer, WxStructDeserializedLayer>,
     
     pub skycover: Option<SkyCoverage>,
     pub wx_codes: Option<Vec<String>>,
@@ -43,12 +20,14 @@ pub struct WxEntryStruct {
     pub cape: Option<SpecEnergy>,
 }
 
-impl<'a> WxEntry<'a, &'a WxEntryLayerStruct> for WxEntryStruct {
+
+impl<'a> WxEntry<'a, &'a WxStructDeserializedLayer> for WxStructDeserialized {
     fn date_time(&self) -> DateTime<Utc> {self.date_time}
-    #[allow(refining_impl_trait)]
-    fn station(&self) -> &'static Station {self.station}
-    #[allow(refining_impl_trait)]
-    fn layer(&'a self, layer: Layer) -> Option<&WxEntryLayerStruct> {
+    fn station(&self) -> &'static Station {
+        let l: &'static Station = Box::leak(Box::new(self.station.clone()));
+        l
+    }
+    fn layer(&'a self, layer: Layer) -> Option<&WxStructDeserializedLayer> {
         self.layers.get(&layer)
     }
     fn layers(&self) -> Vec<Layer> {self.layers.keys().map(|x| x.to_owned()).collect()}
@@ -62,25 +41,41 @@ impl<'a> WxEntry<'a, &'a WxEntryLayerStruct> for WxEntryStruct {
     fn cape(&self)         -> Option<SpecEnergy>  {self.cape} 
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct WxEntryLayerStruct {
+
+
+// impl From<WxStructDeserializedLayer> for WxEntryLayerStruct {
+//     fn from(value: WxStructDeserializedLayer) -> Self {
+//         WxEntryLayerStruct {
+            
+//         }
+//     }
+// }
+
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WxStructDeserializedLayer {
     pub layer: Layer,
-    #[serde(skip_serializing)]
-    pub station: &'static Station,
+    pub station: Station,
     pub temperature: Option<Temperature>,
     pub pressure: Option<Pressure>,
     pub visibility: Option<Distance>,
-    pub wind: Option<Wind>,
+    pub wind: Option<WindExpanded>,
     pub dewpoint: Option<Temperature>,
 }
 
-impl<'a> WxEntryLayer for &'a WxEntryLayerStruct {
+
+
+
+impl<'a> WxEntryLayer for &'a WxStructDeserializedLayer {
     fn layer(&self) -> Layer {self.layer}
     #[allow(refining_impl_trait)]
-    fn station(&self) -> &'static Station {self.station}
+    fn station(&self) -> &'static Station {
+        let l: &'static Station = Box::leak(Box::new(self.station.clone()));
+        l
+    }
     fn temperature(&self) -> Option<Temperature> {self.temperature}
     fn pressure(&self) -> Option<Pressure> {self.pressure}
     fn visibility(&self) -> Option<Distance> {self.visibility}
     fn dewpoint(&self) -> Option<Temperature> {self.dewpoint}
-    fn wind(&self) -> Option<Wind> {self.wind}
+    fn wind(&self) -> Option<Wind> {Some(self.wind.clone()?.into())}
 }

@@ -53,13 +53,14 @@ impl HashMapWx {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct LayerHash<'a> {
     layer: Layer,
     data: &'a HashMapWx
 } 
 
 impl<'a> LayerHash<'a> {
-    fn get<U: Copy + 'static>(&self, param: Param) -> Option<U> {
+    fn get<U: Clone + 'static>(&self, param: Param) -> Option<U> {
         self.data.get(self.layer, param)
     }
 }
@@ -74,6 +75,10 @@ impl<'a> WxEntryLayer for LayerHash<'a> {
     fn visibility(&self) -> Option<Distance> {self.get(Param::Visibility)}
 
     fn dewpoint(&self) -> Option<Temperature> {
+        let g: Option<Temperature> = self.get(Param::Dewpoint);
+        let s = &self.station().name;
+        dbg!(s, g);
+
         self.get(Param::Dewpoint).or({
             Some(dewpoint_from_rh(self.get(Param::Temperature)?, self.get(Param::RelativeHumidity)?))
         })

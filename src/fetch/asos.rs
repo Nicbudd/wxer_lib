@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::*;
 use crate::Layer::*;
@@ -10,10 +10,10 @@ use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::Deserialize;
 use anyhow::{bail, Result};
 
+
+
 pub async fn import(station_name: &str, network: &str, station: &'static Station) -> Result<db::StationData> {
     let url = format!("http://mesonet.agron.iastate.edu/json/current.py?station={}&network={}", station_name, network);
-
-    //dbg!(&url);
 
     let resp: String = reqwest::get(url)
         .await?
@@ -24,10 +24,10 @@ pub async fn import(station_name: &str, network: &str, station: &'static Station
 
     let ob = raw_ob.last_ob;
     
-    let mut dt = ob.utc_valid.parse::<DateTime<Utc>>()?;
-    dt -= Duration::seconds(dt.second() as i64); // round to previous minute
+    let mut date_time = ob.utc_valid.parse::<DateTime<Utc>>()?;
+    date_time -= Duration::seconds(date_time.second() as i64); // round to previous minute
     
-    let mut wx_entry = HashMapWx::new(dt, station);
+    // let mut wx_entry = HashMapWx::new(dt, station);
 
     let precip_today = ignore_none(ob.precip_today, |x| {
         Precip {
@@ -37,53 +37,73 @@ pub async fn import(station_name: &str, network: &str, station: &'static Station
         }
     });
 
-    let direction = ob.winddirectiondeg.map(|x| Direction::from_degrees(x as u16).ok()).flatten();
 
-    wx_entry.put(All, Param::SkyCover, skycover_from_vecs(ob.skycover, ob.skylevel)?);
+    fn make_wind(speed: Option<f32>, dir: Option<f32>) -> Option<Wind> {
+        let speed = Speed::new(speed?, Knots);
+        let direction = Direction::from_degrees(dir? as u16).ok()?;
+        Some(Wind {direction, speed})
+    }
+    
+    let temperature = if let Some(x) = ob.airtempF {Some(Temperature::new(x, Fahrenheit))} else {None};
+    let dewpoint = if let Some(x) = ob.dewpointtempF {Some(Temperature::new(x, Fahrenheit))} else {None};
+    let visibility = if let Some(x) = ob.visibilitymile {Some(Distance::new(x, Mile))} else {None};
+    let pressure = if let Some(x) = ob.mslpmb {Some(Pressure::new(x, HPa))} else {None};
 
-    if let Some(x) = direction {
-        wx_entry.put(All, Param::WindDirection, x);
-    }
-    if let Some(x) = precip_today{
-        wx_entry.put(All, Param::PrecipToday, x);
-    }
-    if let Some(x) = ob.raw {
-        wx_entry.put(All, Param::RawMetar, x);
-    }
-    if let Some(x) = ob.present_wx {
-        wx_entry.put(All, Param::WxCodes, x);
-    }
+    let wind = make_wind(ob.windspeedkt, ob.winddirectiondeg);
+    // let precip_
 
-    if let Some(x) = ob.airtempF{
-        wx_entry.put(NearSurface, Param::Temperature, Temperature::new(x, Fahrenheit));
-    }
-    if let Some(x) = ob.dewpointtempF {
-        wx_entry.put(NearSurface, Param::Dewpoint, Temperature::new(x, Fahrenheit));
-    }
-    if let Some(x) = ob.windspeedkt {
-        wx_entry.put(NearSurface, Param::WindSpeed, Speed::new(x, Knots));
-    }
-    if let Some(x) = ob.winddirectiondeg {
-        let dir = Direction::from_degrees(x as u16);
-        if let Ok(y) = dir {
-            wx_entry.put(NearSurface, Param::WindDirection, y);
-        } else {
-            warn!("{} ASOS: Failed to convert {x} into degrees", station_name)
-        }
-    }
-    if let Some(x) = ob.altimeterin {
-        wx_entry.put(NearSurface, Param::Altimeter, Pressure::new(x, InHg));
-    }
-    if let Some(x) = ob.visibilitymile {
-        wx_entry.put(NearSurface, Param::Visibility, Distance::new(x, Mile));
-    }
-    if let Some(x) = ob.altimeterin {
-        wx_entry.put(SeaLevel, Param::Pressure,  Pressure::new(x, InHg));
-    }
+    let near_surface = WxEntryLayerStruct {
+        layer: NearSurface,
+        station: station,
+        temperature,
+        pressure: None,
+        visibility,
+        wind,
+        dewpoint,
+    };
+
+    let sea_level = WxEntryLayerStruct {
+        layer: SeaLevel,
+        station: station,
+        temperature: None,
+        pressure,
+        visibility: None,
+        wind: None,
+        dewpoint: None,
+    };
+
+    let mut layers = HashMap::new();
+    layers.insert(NearSurface, near_surface);
+    layers.insert(SeaLevel, sea_level);
+
+    let altimeter = if let Some(x) = ob.altimeterin {Some(Pressure::new(x, InHg))} else {None};
+    let skycover = skycover_from_vecs(ob.skycover, ob.skylevel).ok();
+
+    let wx_entry = WxEntryStruct {
+        date_time,
+        station,
+        layers,
+        altimeter,
+        skycover,
+        cape: None,
+        precip: None,
+        precip_today,
+        wx_codes:  ob.present_wx,
+        raw_metar: ob.raw,
+    };
+
+    // let d = wx_entry.get::<Temperature>(NearSurface, Param::Dewpoint);
+    // let dew = wx_entry.surface().unwrap().dewpoint();
+    // dbg!(d, dew);
+
+
 
     let mut asos_db = BTreeMap::new();
     
-    asos_db.insert(dt, wx_entry.to_struct()?);
+    let as_struct = wx_entry.to_struct()?;
+    dbg!(&as_struct);
+
+    asos_db.insert(date_time, as_struct);
 
 
     Ok(asos_db)
