@@ -1,31 +1,34 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
-use crate::{db::StationData, rh_to_dewpoint, Direction, Layer, Precip, Station, WxEntry, WxEntryLayer};
+use crate::units::*; 
+use crate::*;
+use crate::db::StationData;
 
 use chrono::{offset::LocalResult, DateTime, Datelike, Local, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::US::Eastern;
 use serde::Deserialize;
 use anyhow::Result;
 
-pub async fn import(date: DateTime<Utc>) -> Result<StationData> {
+
+
+pub async fn import(date: DateTime<Utc>, station: &'static Station) -> Result<StationData> {
 
     let day = date.with_timezone(&Eastern).ordinal();
     let year = date.with_timezone(&Eastern).year();
 
     let url = format!("https://www.weather.unh.edu/data/{year}/{day}.txt");
-    // dbg!(&url);
 
-    let unh_text = reqwest::get(&url).await?.text().await?;
+    let unh_text= reqwest::get(&url).await?.text().await?;
 
     let mut rdr = csv::Reader::from_reader(unh_text.as_bytes());
 
     let mut db = BTreeMap::new();
 
     for entry_result in rdr.deserialize() {
-        let entry: UNHWxEntry = entry_result?;
-        let wx_entry: WxEntry = entry.to_wx_entry();
+        let data: UNHData = entry_result?;
+        let entry = UNHDataWithStation {data, station};
 
-        db.insert(wx_entry.date_time, wx_entry);
+        db.insert(entry.date_time(), entry.to_struct()?);
     }
 
     Ok(db)
@@ -33,27 +36,8 @@ pub async fn import(date: DateTime<Utc>) -> Result<StationData> {
     // Ok(result_map)
 }
 
-fn deserialize_unh_dt<'de, D>(des: D) -> Result<DateTime<Utc>, D::Error> 
-    where D: serde::Deserializer<'de> {
-
-    let s = String::deserialize(des)?;
-
-    let dt_naive = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S").map_err(serde::de::Error::custom)?;
-
-    let local_result: LocalResult<DateTime<Local>> = Local.from_local_datetime( &dt_naive); 
-
-    let dt_local = match local_result {
-        LocalResult::None => {DateTime::default()}
-        LocalResult::Single(a) => a,
-        LocalResult::Ambiguous(a, _) => a, // idc 
-    };
-
-    let dt_utc = dt_local.naive_utc().and_utc();
-
-    Ok(dt_utc)
-}
 #[derive(Debug, Deserialize)]
-struct UNHWxEntry {
+struct UNHData {
     #[serde(rename="Datetime")]
     #[serde(deserialize_with="deserialize_unh_dt")]
     dt: DateTime<Utc>,
@@ -86,59 +70,70 @@ struct UNHWxEntry {
     wind_dir: f32,
 }
 
-impl UNHWxEntry {
-    fn to_wx_entry(self) -> WxEntry {
-        let unh_station = Station {
-            name: "UNH".into(),
-            altitude: 28.0, //meters
-            coords: (43.1348, -70.9358)
-        };
+#[derive(Debug)]
+struct UNHDataWithStation {
+    data: UNHData,
+    station: &'static Station
+}
 
-        let mut layers = HashMap::new();
+fn deserialize_unh_dt<'de, D>(des: D) -> Result<DateTime<Utc>, D::Error> 
+    where D: serde::Deserializer<'de> {
 
-        layers.insert(Layer::NearSurface, WxEntryLayer { 
-            layer: Layer::NearSurface, 
-            height_agl: Some(6.0), 
-            height_msl: Some(28.0), 
-            temperature: Some(self.temperature_2m), 
-            dewpoint: Some(rh_to_dewpoint(self.temperature_2m, self.relative_humidity)), 
-            pressure: None, 
-            wind_direction: Direction::from_degrees(self.wind_dir as u16).ok(), 
-            wind_speed: Some(self.wind_speed), 
-            visibility: None,
+    let s = String::deserialize(des)?;
 
-            relative_humidity: None,
-            slp: None,
-            wind_chill: None,
-            heat_index: None,
-            apparent_temp: None,
-            theta_e: None,
-        });
+    let dt_naive = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S").map_err(serde::de::Error::custom)?;
+
+    let local_result: LocalResult<DateTime<Local>> = Local.from_local_datetime( &dt_naive); 
+
+    let dt_local = match local_result {
+        LocalResult::None => {DateTime::default()}
+        LocalResult::Single(a) => a,
+        LocalResult::Ambiguous(a, _) => a, // idc 
+    };
+
+    let dt_utc = dt_local.naive_utc().and_utc();
+
+    Ok(dt_utc)
+}
+
+impl<'a> WxEntry<'a, &'a UNHDataWithStation> for UNHDataWithStation {
+    fn date_time(&self) -> DateTime<Utc> {self.data.dt}
+    #[allow(refining_impl_trait)]
+    fn station(&self) -> &'static Station {self.station}
     
-        let mut entry = WxEntry { 
-            date_time: self.dt, 
-            station: unh_station, 
-            layers, 
-            cape: None, 
-            skycover: None, 
-            wx_codes: None, 
-            raw_metar: None, 
-            precip_today: None, 
-            precip: Some(Precip {
-                rain: self.rain,
-                snow: 0.,
-                unknown: 0.,
-            }), 
-            precip_probability: None,
-            altimeter: None,
-            
-            wx: None,
-            best_slp: None,
-        };
+    fn layer(&'a self, layer: Layer) -> Option<&UNHDataWithStation> {
+        if layer == Layer::NearSurface {
+            Some(&self)
+        } else {
+            None
+        }
+    }
+    fn layers(&self) -> Vec<Layer> {vec![Layer::NearSurface]}
 
-        entry.fill_in_calculated_values();
+    fn precip_today(&self) -> Option<Precip> {
+        Some(Precip { 
+            unknown: PrecipAmount::new(0., Inch), 
+            rain: PrecipAmount::new(self.data.rain, Inch), 
+            snow: PrecipAmount::new(0., Inch) 
+        })
+    }
+} 
 
-        return entry
+impl<'a> WxEntryLayer for &UNHDataWithStation {
+    fn layer(&self) -> Layer {Layer::NearSurface}
+    #[allow(refining_impl_trait)]
+    fn station(&self) -> &'static Station {self.station}
 
+    fn temperature(&self) -> Option<Temperature> {
+        Some(Temperature::new(self.data.temperature_2m, Fahrenheit))
+    }
+    fn relative_humidity(&self) -> Option<Fraction> {
+        Some(Fraction::new(self.data.relative_humidity, Percent))
+    } 
+    fn wind(&self) -> Option<Wind> {
+        Some(Wind {
+            direction: Direction::from_degrees(self.data.wind_dir as u16).ok()?,
+            speed: Speed::new(self.data.wind_speed, Mph)
+        })
     }
 }

@@ -1,15 +1,19 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{db::StationData, ignore_none, inhg_to_hpa, CloudLayer, Direction, Layer, Precip, SkyCoverage, Station, WxEntry, WxEntryLayer};
+use crate::*;
+use crate::Layer::*;
+#[allow(unused)]
+use log::{error, warn, info, debug, trace};
+// use crate::{db::StationData, ignore_none, CloudLayer, Direction, Layer, Precip, SkyCoverage, Station, WxEntry, WxEntryLayer};
 
 use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::Deserialize;
 use anyhow::{bail, Result};
 
-pub async fn import(station_name: &str, network: &str, station: Station) -> Result<StationData> {
-    let url = format!("http://mesonet.agron.iastate.edu/json/current.py?station={}&network={}", station_name, network);
 
-    //dbg!(&url);
+
+pub async fn import(station_name: &str, network: &str, station: &'static Station) -> Result<db::StationData> {
+    let url = format!("http://mesonet.agron.iastate.edu/json/current.py?station={}&network={}", station_name, network);
 
     let resp: String = reqwest::get(url)
         .await?
@@ -18,89 +22,89 @@ pub async fn import(station_name: &str, network: &str, station: Station) -> Resu
 
     let raw_ob: RawASOSObservation = serde_json::from_str(&resp)?;
 
-    let mut dt = raw_ob.last_ob.utc_valid.parse::<DateTime<Utc>>()?;
-    dt -= Duration::seconds(dt.second() as i64); // round to previous minute
+    let ob = raw_ob.last_ob;
+    
+    let mut date_time = ob.utc_valid.parse::<DateTime<Utc>>()?;
+    date_time -= Duration::seconds(date_time.second() as i64); // round to previous minute
+    
+    // let mut wx_entry = HashMapWx::new(dt, station);
 
-    let skycover = Some(skycover_from_vecs(raw_ob.last_ob.skycover, raw_ob.last_ob.skylevel)?);
-
-    let wind_direction = match raw_ob.last_ob.winddirectiondeg {
-        Some(dir) => Some(Direction::from_degrees(dir as u16)?),
-        None => None
-    };
-
-    let precip_today = ignore_none(raw_ob.last_ob.precip_today, |x| {
-        Precip{unknown: x, rain: 0., snow: 0.}
+    let precip_today = ignore_none(ob.precip_today, |x| {
+        Precip {
+            unknown: PrecipAmount::new(x, Inch), 
+            rain: PrecipAmount::new(0., Inch), 
+            snow: PrecipAmount::new(0., Inch),
+        }
     });
 
-    let present_wx = raw_ob.last_ob.present_wx;
 
-    let mut asos_db = BTreeMap::new();
+    fn make_wind(speed: Option<f32>, dir: Option<f32>) -> Option<Wind> {
+        let speed = Speed::new(speed?, Knots);
+        let direction = Direction::from_degrees(dir? as u16).ok()?;
+        Some(Wind {direction, speed})
+    }
+    
+    let temperature = if let Some(x) = ob.airtempF {Some(Temperature::new(x, Fahrenheit))} else {None};
+    let dewpoint = if let Some(x) = ob.dewpointtempF {Some(Temperature::new(x, Fahrenheit))} else {None};
+    let visibility = if let Some(x) = ob.visibilitymile {Some(Distance::new(x, Mile))} else {None};
+    let pressure = if let Some(x) = ob.mslpmb {Some(Pressure::new(x, HPa))} else {None};
 
-    let near_surface = WxEntryLayer { 
-        layer: Layer::NearSurface, 
-        height_agl: Some(2.0), 
-        height_msl: Some(station.altitude), 
-        temperature: raw_ob.last_ob.airtempF, 
-        dewpoint: raw_ob.last_ob.dewpointtempF, 
-        pressure: None, 
-        wind_direction, 
-        wind_speed: raw_ob.last_ob.windspeedkt, 
-        visibility: raw_ob.last_ob.visibilitymile,
+    let wind = make_wind(ob.windspeedkt, ob.winddirectiondeg);
+    // let precip_
 
-        relative_humidity: None,
-        slp: None,
-        wind_chill: None,
-        heat_index: None,
-        apparent_temp: None,
-        theta_e: None,
+    let near_surface = WxEntryLayerStruct {
+        layer: NearSurface,
+        station: station,
+        temperature,
+        pressure: None,
+        visibility,
+        wind,
+        dewpoint,
     };
 
-    let sea_level = WxEntryLayer { 
-        layer: Layer::SeaLevel, 
-        height_agl: None, 
-        height_msl: Some(0.0), 
-        temperature: None, 
-        dewpoint: None, 
-        pressure: raw_ob.last_ob.mslpmb, 
-        wind_direction: None, 
-        wind_speed: None, 
+    let sea_level = WxEntryLayerStruct {
+        layer: SeaLevel,
+        station: station,
+        temperature: None,
+        pressure,
         visibility: None,
-
-        relative_humidity: None,
-        slp: None,
-        wind_chill: None,
-        heat_index: None,
-        apparent_temp: None,
-        theta_e: None,
+        wind: None,
+        dewpoint: None,
     };
 
     let mut layers = HashMap::new();
+    layers.insert(NearSurface, near_surface);
+    layers.insert(SeaLevel, sea_level);
 
-    layers.insert(Layer::NearSurface, near_surface);
-    layers.insert(Layer::SeaLevel, sea_level);
+    let altimeter = if let Some(x) = ob.altimeterin {Some(Pressure::new(x, InHg))} else {None};
+    let skycover = skycover_from_vecs(ob.skycover, ob.skylevel).ok();
 
-    let mut entry: WxEntry = WxEntry { 
-        date_time: dt,
-        station: station.clone(),
-
+    let wx_entry = WxEntryStruct {
+        date_time,
+        station,
         layers,
-
-        cape: None,
+        altimeter,
         skycover,
-        raw_metar: raw_ob.last_ob.raw,
-        precip_today,
+        cape: None,
         precip: None,
-        precip_probability: None,
-        wx: None,
-        wx_codes: present_wx,
-        altimeter: raw_ob.last_ob.altimeterin.map(|x| inhg_to_hpa(x)),
-
-        best_slp: None,
+        precip_today,
+        wx_codes:  ob.present_wx,
+        raw_metar: ob.raw,
     };
 
-    entry.fill_in_calculated_values();
+    // let d = wx_entry.get::<Temperature>(NearSurface, Param::Dewpoint);
+    // let dew = wx_entry.surface().unwrap().dewpoint();
+    // dbg!(d, dew);
 
-    asos_db.insert(dt, entry);
+
+
+    let mut asos_db = BTreeMap::new();
+    
+    let as_struct = wx_entry.to_struct()?;
+    // dbg!(&as_struct);
+
+    asos_db.insert(date_time, as_struct);
+
 
     Ok(asos_db)
 }
@@ -164,7 +168,15 @@ struct ASOSOb {
     #[serde(rename="cltmpf[F]")]
     cltmpf: Option<f32>,
 
+    // #[serde(skip_deserializing)]
+    // date_time: DateTime<Utc>,
+
+    // #[serde(skip_deserializing)]
+    // station: Station,
+
 }
+
+
 
 fn skycover_from_vecs(cover: Vec<Option<String>>, level: Vec<Option<u32>>) -> Result<SkyCoverage> {
     
