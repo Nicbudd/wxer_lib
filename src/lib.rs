@@ -6,6 +6,8 @@ use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use derive_more::Display;
 
+use polars::prelude::*;
+
 pub fn ignore_none<T, R, F: FnMut(T) -> R>(a: Option<T>, mut f: F) -> Option<R> {
     match a {
         None => None,
@@ -605,7 +607,16 @@ impl fmt::Debug for WxEntry {
     }
 }
 
-pub type StationDatabase = BTreeMap<DateTime<Utc>, WxEntry>;
+pub struct StationDatabase {
+    pub station: Station,
+    pub df: DataFrame,
+}
+
+pub struct LazyStationDatabase {
+    pub station: Station,
+    pub df: LazyFrame,
+}
+
 
 #[cfg(test)]
 mod tests {
