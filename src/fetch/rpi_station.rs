@@ -1,12 +1,11 @@
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Duration, Timelike, Utc};
 use anyhow::Result;
+use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::Deserialize;
 
-use crate::*;
 use crate::Layer::*;
-
+use crate::*;
 
 // Imports data from my raspberry pi station.
 // Code is not online yet, but I plan to open source it.
@@ -14,17 +13,18 @@ use crate::Layer::*;
 
 // station URL is going to be something like http://rpi_address:8000
 // todo: better name for rpi station
-pub async fn import(station_url: &str, date: DateTime<Utc>, station: &'static Station) -> Result<db::StationData> {
-
-    let url = format!("{station_url}/{}.csv", date.format("%Y-%m-%d").to_string());
-    let resp: String = reqwest::get(url)
-        .await?
-        .text()
-        .await?;
+pub async fn import(
+    station_url: &str,
+    date: DateTime<Utc>,
+    station: &'static Station,
+) -> Result<db::StationData> {
+    let url = format!("{station_url}/{}.csv", date.format("%Y-%m-%d"));
+    let resp: String = reqwest::get(url).await?.text().await?;
 
     // dbg!(&resp);
 
-    let csv_string = String::from("time,indoor_temp,outdoor_temp,rh,dewpoint,raw_pres,mslp\n") + resp.as_str();
+    let csv_string =
+        String::from("time,indoor_temp,outdoor_temp,rh,dewpoint,raw_pres,mslp\n") + resp.as_str();
 
     let mut reader = csv::Reader::from_reader(csv_string.as_bytes());
 
@@ -35,21 +35,31 @@ pub async fn import(station_url: &str, date: DateTime<Utc>, station: &'static St
             Ok((dt, entry)) => {
                 let entry_struct = entry.to_struct()?;
                 local_db.insert(dt, entry_struct);
-            },
-            Err(e) => {println!("Error parsing entry {i}: {e}");}
+            }
+            Err(e) => {
+                println!("Error parsing entry {i}: {e}");
+            }
         }
-    } 
+    }
 
     // dbg!();
 
     Ok(local_db)
 }
 
-fn try_parse_entry(record: Result<RaspPiEntry, csv::Error>, station: &'static Station) -> Result<(DateTime<Utc>, HashMapWx)> {
+fn try_parse_entry(
+    record: Result<RaspPiEntry, csv::Error>,
+    station: &'static Station,
+) -> Result<(DateTime<Utc>, HashMapWx)> {
     let record: RaspPiEntry = record?;
 
-    let time_string = String::from(record.time.clone()) + "Z";
-    let mut dt = time_string.trim().chars().filter(|x| x != &'\0').collect::<String>().parse::<DateTime<Utc>>()?;
+    let time_string = record.time.clone() + "Z";
+    let mut dt = time_string
+        .trim()
+        .chars()
+        .filter(|x| x != &'\0')
+        .collect::<String>()
+        .parse::<DateTime<Utc>>()?;
     dt = dt - Duration::seconds(dt.second() as i64 + 60); // to account for when the data collection ends
 
     let mut wx = HashMapWx::new(dt, station);
@@ -59,18 +69,26 @@ fn try_parse_entry(record: Result<RaspPiEntry, csv::Error>, station: &'static St
     }
 
     if let Some(x) = record.outdoor_temp {
-        wx.put(NearSurface, Param::Temperature, Temperature::new(x, Fahrenheit));
+        wx.put(
+            NearSurface,
+            Param::Temperature,
+            Temperature::new(x, Fahrenheit),
+        );
     }
 
     if let Some(x) = record.dewpoint {
-        wx.put(NearSurface, Param::Dewpoint, Temperature::new(x, Fahrenheit));
+        wx.put(
+            NearSurface,
+            Param::Dewpoint,
+            Temperature::new(x, Fahrenheit),
+        );
     }
 
     if let Some(x) = record.raw_pres {
         wx.put(NearSurface, Param::Pressure, Pressure::new(x, Mbar));
         wx.put(Indoor, Param::Pressure, Pressure::new(x, Mbar));
     }
-    
+
     Ok((dt, wx))
 }
 

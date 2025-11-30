@@ -1,52 +1,61 @@
 // PUBLIC UNIT TRAIT -----------------------------------------------------------
 
-pub trait Unit<T: UnitsType>: where Self: Clone + Copy + Sized + fmt::Display {
+pub trait Unit<T: UnitsType>
+where
+    Self: Clone + Copy + Sized + fmt::Display,
+{
     fn new(value: f32, unit: T) -> Self;
     // don't want users accidentally accessing the value without checking the unit
     fn unit(&self) -> T;
     fn convert(&self, unit: T) -> Self;
     fn string_with_unit(&self) -> String;
     fn value_in(&self, unit: T) -> f32;
-} 
-
+}
 
 use core::fmt;
 
 pub use hidden::*;
 
 mod hidden {
-    use std::fmt;
-    use std::ops::{Add, Div, Mul, Sub};
+    use super::*;
+    use anyhow::{bail, Result};
     use serde::ser::SerializeStruct;
     use serde::{Deserialize, Serialize};
+    use std::fmt;
+    use std::ops::{Add, Div, Mul, Sub};
     use strum_macros::Display;
-    use anyhow::{bail, Result};
-    use super::*;
 
     // INTERNAL USE UNIT TRAITS  -----------------------------------------------
 
-    trait UnitInternal<T: UnitsType> where Self: Clone + Copy + Sized + fmt::Display {
-
+    trait UnitInternal<T: UnitsType>
+    where
+        Self: Clone + Copy + Sized + fmt::Display,
+    {
         fn new(value: f32, unit: T) -> Self;
         fn value(&self) -> f32;
         fn unit(&self) -> T;
         fn convert(&self, unit: T) -> Self {
-            if self.unit() == unit { // avoid conversions if the units are the same
-                return self.clone()
+            if self.unit() == unit {
+                // avoid conversions if the units are the same
+                *self
             } else {
-                return Self::convert(&self, unit);
+                Self::convert(self, unit)
             }
         }
 
         fn string_with_unit(&self) -> String {
             format!("{:.1} {}", self.value(), UnitInternal::unit(self))
         }
-        fn value_in(&self, unit: T) -> f32 { // get the value of a unit in some other unit
+        fn value_in(&self, unit: T) -> f32 {
+            // get the value of a unit in some other unit
             UnitInternal::convert(self, unit).value()
         }
     }
 
-    pub trait UnitsType: Clone + Copy + PartialEq + Eq + fmt::Display + fmt::Debug + Serialize {}
+    pub trait UnitsType:
+        Clone + Copy + PartialEq + Eq + fmt::Display + fmt::Debug + Serialize
+    {
+    }
 
     // PROPORTIONAL UNIT STRUCT ------------------------------------------------
     // helpful for building most units (where the conversion between units are proportional)
@@ -58,25 +67,29 @@ mod hidden {
     }
     pub trait Proportional: UnitsType {
         fn coefficient(&self) -> f32; // the coefficient that when multiplied by
-                           // the value would convert this unit into the 
-                           // "default" unit.
+                                      // the value would convert this unit into the
+                                      // "default" unit.
     }
     impl<T: Proportional> UnitInternal<T> for ProportionalUnit<T> {
         fn new(value: f32, unit: T) -> Self {
-            Self {value, unit}
+            Self { value, unit }
         }
-        fn value(&self) -> f32 {self.value}
-        fn unit(&self) -> T {self.unit}
+        fn value(&self) -> f32 {
+            self.value
+        }
+        fn unit(&self) -> T {
+            self.unit
+        }
 
         fn convert(&self, unit: T) -> Self {
-            let value_as_default_unit = ProportionalUnit::value(self) * 
-                UnitInternal::unit(self).coefficient();
+            let value_as_default_unit =
+                ProportionalUnit::value(self) * UnitInternal::unit(self).coefficient();
 
             let value_in_new_unit = value_as_default_unit / unit.coefficient();
 
             ProportionalUnit {
                 unit,
-                value: value_in_new_unit
+                value: value_in_new_unit,
             }
         }
     }
@@ -104,16 +117,23 @@ mod hidden {
     pub enum SpeedUnit {
         #[strum(to_string = "mph")]
         #[serde(rename = "mph")]
-        Mph, 
+        Mph,
         #[strum(to_string = "kph")]
         #[serde(rename = "kph", alias = "k/h")]
-        Kph, 
+        Kph,
         #[strum(to_string = "kts")]
-        #[serde(rename = "kts", alias = "kt", alias = "knots", alias = "kn", alias = "nmi/s", alias = "nm/s")]
+        #[serde(
+            rename = "kts",
+            alias = "kt",
+            alias = "knots",
+            alias = "kn",
+            alias = "nmi/s",
+            alias = "nm/s"
+        )]
         Knots,
         #[strum(to_string = "m/s")]
         #[serde(alias = "mps", rename = "m/s")]
-        Mps,  
+        Mps,
     }
     pub use SpeedUnit::*;
 
@@ -137,19 +157,19 @@ mod hidden {
     pub enum PressureUnit {
         #[strum(to_string = "hPa")]
         #[serde(rename = "hPa")]
-        HPa, 
+        HPa,
         #[strum(to_string = "mb")]
         #[serde(rename = "mb", alias = "mbar")]
-        Mbar, 
+        Mbar,
         #[strum(to_string = "inHg")]
         #[serde(alias = "inhg", rename = "inHg")]
         InHg,
         #[strum(to_string = "psi")]
         #[serde(rename = "psi")]
-        Psi,  
+        Psi,
         #[strum(to_string = "atm")]
         #[serde(rename = "atm")]
-        Atm,  
+        Atm,
     }
     pub use PressureUnit::*;
 
@@ -174,10 +194,10 @@ mod hidden {
     pub enum SpecEnergyUnit {
         #[strum(to_string = "J/kg")]
         #[serde(rename = "J/kg")]
-        Jkg, 
+        Jkg,
         #[strum(to_string = "m^2/s^2")]
         #[serde(rename = "m^2/s^2")]
-        M2s2, 
+        M2s2,
     }
     pub use SpecEnergyUnit::*;
 
@@ -200,19 +220,19 @@ mod hidden {
     pub enum DistanceUnit {
         #[strum(to_string = "m")]
         #[serde(rename = "m")]
-        Meter, 
+        Meter,
         #[strum(to_string = "km")]
         #[serde(rename = "km")]
-        Kilometer, 
+        Kilometer,
         #[strum(to_string = "ft")]
         #[serde(rename = "ft")]
-        Feet, 
+        Feet,
         #[strum(to_string = "mi")]
         #[serde(rename = "mi")]
-        Mile, 
+        Mile,
         #[strum(to_string = "nmi")]
         #[serde(rename = "nmi")]
-        NauticalMile, 
+        NauticalMile,
     }
     pub use DistanceUnit::*;
 
@@ -229,8 +249,6 @@ mod hidden {
         }
     }
 
-
-
     // PRECIP AMOUNT -----------------------------------------------------------
     pub type PrecipAmount = ProportionalUnit<PrecipUnit>;
 
@@ -239,13 +257,13 @@ mod hidden {
     pub enum PrecipUnit {
         #[strum(to_string = "mm")]
         #[serde(rename = "mm")]
-        Mm, 
+        Mm,
         #[strum(to_string = "in")]
         #[serde(rename = "in")]
-        Inch, 
+        Inch,
         #[strum(to_string = "cm")]
         #[serde(rename = "cm")]
-        Cm, 
+        Cm,
     }
     pub use PrecipUnit::*;
 
@@ -268,13 +286,13 @@ mod hidden {
     pub enum FractionalUnit {
         #[strum(to_string = "%")]
         #[serde(rename = "%")]
-        Percent, 
+        Percent,
         #[strum(to_string = "")]
         #[serde(rename = "")]
-        Decimal, 
+        Decimal,
         #[strum(to_string = "1/1000")]
         #[serde(rename = "1/1000")]
-        Milli, 
+        Milli,
     }
     pub use FractionalUnit::*;
 
@@ -295,7 +313,7 @@ mod hidden {
     #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
     pub struct Temperature {
         value: f32,
-        unit: TemperatureUnit
+        unit: TemperatureUnit,
     }
 
     // this is stupid
@@ -310,38 +328,42 @@ mod hidden {
     pub enum TemperatureUnit {
         #[strum(to_string = "°K")]
         #[serde(rename = "°K", alias = "K")]
-        Kelvin, 
+        Kelvin,
         #[strum(to_string = "°F")]
         #[serde(rename = "°F", alias = "F")]
-        Fahrenheit, 
+        Fahrenheit,
         #[strum(to_string = "°C")]
         #[serde(rename = "°C", alias = "C")]
-        Celsius
+        Celsius,
     }
     pub use TemperatureUnit::*;
 
     impl UnitsType for TemperatureUnit {}
     impl UnitInternal<TemperatureUnit> for Temperature {
         fn new(value: f32, unit: TemperatureUnit) -> Self {
-            Self {value, unit}
+            Self { value, unit }
         }
-        fn value(&self) -> f32 {self.value}
-        fn unit(&self) -> TemperatureUnit {self.unit}
+        fn value(&self) -> f32 {
+            self.value
+        }
+        fn unit(&self) -> TemperatureUnit {
+            self.unit
+        }
 
         fn convert(&self, unit: TemperatureUnit) -> Self {
             let value_in_kelvin = match self.unit {
                 Kelvin => self.value,
                 Celsius => self.value + 273.15,
-                Fahrenheit => (self.value + 459.67)*(5./9.)
+                Fahrenheit => (self.value + 459.67) * (5. / 9.),
             };
             let value_in_new_unit = match unit {
                 Kelvin => value_in_kelvin,
                 Celsius => value_in_kelvin - 273.15,
-                Fahrenheit => (value_in_kelvin*(9./5.)) - 459.67
+                Fahrenheit => (value_in_kelvin * (9. / 5.)) - 459.67,
             };
-            return Self { 
-                value: value_in_new_unit, 
-                unit, 
+            Self {
+                value: value_in_new_unit,
+                unit,
             }
         }
     }
@@ -350,19 +372,19 @@ mod hidden {
     // does not use the standard unit trait
 
     #[derive(Debug, Clone, Copy, derive_more::Display, Serialize, Deserialize)]
-    pub struct Direction(u16); 
+    pub struct Direction(u16);
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct DirectionExpanded {
         degrees: u16,
         cardinal: String,
-    }    
+    }
 
     impl From<Direction> for DirectionExpanded {
         fn from(value: Direction) -> Self {
-            DirectionExpanded { 
-                degrees: value.0, 
-                cardinal: value.cardinal().to_string() 
+            DirectionExpanded {
+                degrees: value.0,
+                cardinal: value.cardinal().to_string(),
             }
         }
     }
@@ -372,7 +394,6 @@ mod hidden {
             Direction(value.degrees)
         }
     }
-
 
     // impl Serialize for Direction {
     //     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
@@ -385,24 +406,24 @@ mod hidden {
     // }
 
     fn int_to_cardinal(n: u16) -> Option<&'static str> {
-         match n {
-            350 | 0 | 10     => Some("N"),
-            20 | 30          => Some("NNE"),
-            40 | 50          => Some("NE"),
-            60 | 70          => Some("ENE"),
-            80 | 90 | 100    => Some("E"),
-            110 | 120        => Some("ESE"),
-            130 | 140        => Some("SE"),
-            150 | 160        => Some("SSE"),
-            170 | 180 | 190  => Some("S"),
-            200 | 210        => Some("SSW"),
-            220 | 230        => Some("SW"),
-            240 | 250        => Some("WSW"),
-            260 | 270 | 280  => Some("W"),
-            290 | 300        => Some("WNW"),
-            310 | 320        => Some("NW"),
-            330 | 340        => Some("NNW"),
-            _ => None
+        match n {
+            350 | 0 | 10 => Some("N"),
+            20 | 30 => Some("NNE"),
+            40 | 50 => Some("NE"),
+            60 | 70 => Some("ENE"),
+            80 | 90 | 100 => Some("E"),
+            110 | 120 => Some("ESE"),
+            130 | 140 => Some("SE"),
+            150 | 160 => Some("SSE"),
+            170 | 180 | 190 => Some("S"),
+            200 | 210 => Some("SSW"),
+            220 | 230 => Some("SW"),
+            240 | 250 => Some("WSW"),
+            260 | 270 | 280 => Some("W"),
+            290 | 300 => Some("WNW"),
+            310 | 320 => Some("NW"),
+            330 | 340 => Some("NNW"),
+            _ => None,
         }
     }
 
@@ -419,7 +440,7 @@ mod hidden {
         fn sanitize_degrees(degrees: u16) -> Result<u16> {
             let degrees = if degrees > 360 {
                 bail!("Degrees provided ({degrees}) were not under 360.");
-            } else if degrees % 10 != 0 {
+            } else if !degrees.is_multiple_of(10) {
                 ((degrees + 5) / 10) * 10 // round to nearest 10
             } else {
                 degrees
@@ -439,20 +460,32 @@ mod hidden {
 
         pub fn degrees(&self) -> u16 {
             self.0
-        } 
+        }
     }
 
-    
     // UNIT TRAIT IMPLEMENTATIONS ----------------------------------------------
     // (boring paperwork to connect the above traits together)
 
-    impl<T: UnitsType, U: UnitInternal<T>> Unit<T> for U where Self: Clone + Copy + Sized {
+    impl<T: UnitsType, U: UnitInternal<T>> Unit<T> for U
+    where
+        Self: Clone + Copy + Sized,
+    {
         // fn value(&self) -> f32 {U::value(&self)}
-        fn new(value: f32, unit: T) -> Self {U::new(value, unit)}
-        fn unit(&self) -> T {U::unit(&self)}
-        fn convert(&self, unit: T) -> Self {U::convert(&self, unit)}
-        fn string_with_unit(&self) -> String {U::string_with_unit(&self)}
-        fn value_in(&self, unit: T) -> f32 {U::value_in(&self, unit)}
+        fn new(value: f32, unit: T) -> Self {
+            U::new(value, unit)
+        }
+        fn unit(&self) -> T {
+            U::unit(self)
+        }
+        fn convert(&self, unit: T) -> Self {
+            U::convert(self, unit)
+        }
+        fn string_with_unit(&self) -> String {
+            U::string_with_unit(self)
+        }
+        fn value_in(&self, unit: T) -> f32 {
+            U::value_in(self, unit)
+        }
     }
 
     impl<T: Proportional> Add for ProportionalUnit<T> {
@@ -478,14 +511,20 @@ mod hidden {
     impl<T: Proportional> Mul<f32> for ProportionalUnit<T> {
         type Output = Self;
         fn mul(self, rhs: f32) -> Self {
-            Self { value: self.value*rhs, unit: self.unit }
+            Self {
+                value: self.value * rhs,
+                unit: self.unit,
+            }
         }
     }
 
     impl<T: Proportional> Div<f32> for ProportionalUnit<T> {
         type Output = Self;
         fn div(self, rhs: f32) -> Self {
-            Self { value: self.value/rhs, unit: self.unit }
+            Self {
+                value: self.value / rhs,
+                unit: self.unit,
+            }
         }
     }
 
@@ -504,7 +543,10 @@ mod hidden {
     }
 
     impl<T: Proportional> Serialize for ProportionalUnit<T> {
-        fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> where S: serde::Serializer {
+        fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
             let mut state = serializer.serialize_struct("Unit", 2)?;
             state.serialize_field("value", &self.value)?;
             state.serialize_field("unit", &self.unit)?;
@@ -512,9 +554,6 @@ mod hidden {
         }
     }
 }
-
-
-
 
 // TESTS -----------------------------------------------------------------------
 
@@ -524,13 +563,10 @@ mod tests {
 
     #[test]
     fn temperature() {
-
         let mut t = Temperature::new(68.0, Fahrenheit);
 
         // keep converting it back and forth between units
-        for (_i, u) in [Celsius, Kelvin, Fahrenheit, Kelvin, Celsius, Fahrenheit]
-            .iter().enumerate() {
-            
+        for u in [Celsius, Kelvin, Fahrenheit, Kelvin, Celsius, Fahrenheit].iter() {
             t = t.convert(*u);
             assert!((t.value_in(Fahrenheit) - 68.0).abs() < 0.001);
             assert!((t.value_in(Celsius) - 20.0).abs() < 0.001);
@@ -542,18 +578,16 @@ mod tests {
 
     #[test]
     fn pressure() {
-
         let mut p = Pressure::new(897., Mbar);
 
         // keep converting it back and forth between units
-        for (_i, u) in [HPa, Mbar, InHg, Psi, Mbar, InHg, HPa, Psi, HPa].iter().enumerate() {
-            
+        for u in [HPa, Mbar, InHg, Psi, Mbar, InHg, HPa, Psi, HPa].iter() {
             p = p.convert(*u);
             assert!((p.value_in(Mbar) - 897.).abs() < 0.01);
             assert!((p.value_in(HPa) - 897.).abs() < 0.01);
-            assert!((p.value_in(InHg) - 26.4883987947).abs() < 0.001);
-            assert!((p.value_in(Psi) - 13.0098850743).abs() < 0.001);
-            assert!((p.value_in(Atm) - 0.8852701702).abs() < 0.0001);
+            assert!((p.value_in(InHg) - 26.488_4).abs() < 0.001);
+            assert!((p.value_in(Psi) - 13.009_885).abs() < 0.001);
+            assert!((p.value_in(Atm) - 0.885_270_2).abs() < 0.0001);
         }
 
         assert_eq!(p.string_with_unit(), "897.0 hPa");
@@ -561,20 +595,17 @@ mod tests {
 
     #[test]
     fn speed() {
-
         let mut s = Speed::new(180., Mph);
 
         // keep converting it back and forth between units
-        for (_i, u) in [Mph, Kph, Knots, Mps, Knots, Kph, Mph].iter().enumerate() {
-            
+        for u in [Mph, Kph, Knots, Mps, Knots, Kph, Mph].iter() {
             s = s.convert(*u);
             assert!((s.value_in(Mph) - 180.).abs() < 0.01);
             assert!((s.value_in(Kph) - 289.68192).abs() < 0.01);
-            assert!((s.value_in(Knots) - 156.4157235421).abs() < 0.001);
+            assert!((s.value_in(Knots) - 156.415_73).abs() < 0.001);
             assert!((s.value_in(Mps) - 80.4672).abs() < 0.001);
         }
 
         assert_eq!(s.string_with_unit(), "180.0 mph");
     }
-    
 }

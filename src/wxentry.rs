@@ -1,14 +1,14 @@
-use std::{collections::HashMap, f32::consts::PI, fmt};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
+use std::{collections::HashMap, f32::consts::PI, fmt};
 
-use crate::units::*;
 use crate::formulae::*;
+use crate::units::*;
 
 mod components;
-pub use components::*;
 pub use components::Layer::*;
+pub use components::*;
 
 mod entry_struct;
 pub use entry_struct::*;
@@ -22,11 +22,10 @@ pub use wxall::*;
 mod hashmap;
 pub use hashmap::*;
 
-
-
-
-pub trait WxEntry<'a, L: WxEntryLayer> where Self: fmt::Debug {
-
+pub trait WxEntry<'a, L: WxEntryLayer>
+where
+    Self: fmt::Debug,
+{
     // REQUIRED FIELDS ---------------------------------------------------------
     fn date_time(&self) -> DateTime<Utc>;
     fn station(&self) -> &'static Station;
@@ -35,13 +34,27 @@ pub trait WxEntry<'a, L: WxEntryLayer> where Self: fmt::Debug {
     // fn new(station: &Station) -> Self;
 
     // OPTIONAL FIELDS ---------------------------------------------------------
-    fn skycover(&self) -> Option<SkyCoverage> {None}
-    fn wx_codes(&self) -> Option<Vec<String>> {None}
-    fn raw_metar(&self) -> Option<String> {None}
-    fn precip_today(&self) -> Option<Precip> {None}
-    fn precip(&self) -> Option<Precip> {None}
-    fn altimeter(&self) -> Option<Pressure> {None}
-    fn cape(&self) -> Option<SpecEnergy> {None} 
+    fn skycover(&self) -> Option<SkyCoverage> {
+        None
+    }
+    fn wx_codes(&self) -> Option<Vec<String>> {
+        None
+    }
+    fn raw_metar(&self) -> Option<String> {
+        None
+    }
+    fn precip_today(&self) -> Option<Precip> {
+        None
+    }
+    fn precip(&self) -> Option<Precip> {
+        None
+    }
+    fn altimeter(&self) -> Option<Pressure> {
+        None
+    }
+    fn cape(&self) -> Option<SpecEnergy> {
+        None
+    }
 
     // CALCULATED FIELDS -------------------------------------------------------
 
@@ -55,14 +68,14 @@ pub trait WxEntry<'a, L: WxEntryLayer> where Self: fmt::Debug {
     }
 
     fn latitude(&self) -> f32 {
-        return self.station().coords.latitude;
+        self.station().coords.latitude
     }
 
     fn best_slp(&'a self) -> Option<Pressure> {
-        let option_1 = {self.layer(SeaLevel).map(|x| x.pressure()).flatten()};
-        let option_2 = {self.layer(NearSurface).map(|x| x.slp()).flatten()};
-        let option_3 = {self.layer(Indoor).map(|x| x.slp()).flatten()};
-        let option_4 = {self.mslp_from_altimeter()};
+        let option_1 = { self.layer(SeaLevel).and_then(|x| x.pressure()) };
+        let option_2 = { self.layer(NearSurface).and_then(|x| x.slp()) };
+        let option_3 = { self.layer(Indoor).and_then(|x| x.slp()) };
+        let option_4 = { self.mslp_from_altimeter() };
 
         option_1.or(option_2).or(option_3).or(option_4)
     }
@@ -70,7 +83,6 @@ pub trait WxEntry<'a, L: WxEntryLayer> where Self: fmt::Debug {
     fn date_time_local(&self) -> DateTime<Tz> {
         self.date_time().with_timezone(&self.station().time_zone)
     }
-
 
     // ACCESSOR FIELDS ---------------------------------------------------------
 
@@ -88,10 +100,12 @@ pub trait WxEntry<'a, L: WxEntryLayer> where Self: fmt::Debug {
 
     fn to_struct(&'a self) -> Result<WxEntryStruct> {
         let mut layers = HashMap::new();
-        
+
         for layer in self.layers() {
-            let layer = self.layer(layer).context("Layer in layers() was not contained in layer(layer).")?;
-            
+            let layer = self
+                .layer(layer)
+                .context("Layer in layers() was not contained in layer(layer).")?;
+
             let l = WxEntryLayerStruct {
                 layer: layer.layer(),
                 station: self.station(),
@@ -115,24 +129,28 @@ pub trait WxEntry<'a, L: WxEntryLayer> where Self: fmt::Debug {
             wx_codes: self.wx_codes(),
             raw_metar: self.raw_metar(),
             precip_today: self.precip_today(),
-            precip: self.precip()
+            precip: self.precip(),
         })
     }
 
-    
     // FOR USE BY IMPLEMENTORS -------------------------------------------------
 
     fn station_pressure_from_altimeter(&self) -> Option<Pressure> {
-        Some(altimeter_to_station(self.altimeter()?, self.station().altitude))
+        Some(altimeter_to_station(
+            self.altimeter()?,
+            self.station().altitude,
+        ))
     }
 
     fn mslp_from_altimeter(&'a self) -> Option<Pressure> {
         let surface = self.layer(NearSurface)?;
-        Some(altimeter_to_slp(self.altimeter()?, self.station().altitude, surface.temperature()?))
+        Some(altimeter_to_slp(
+            self.altimeter()?,
+            self.station().altitude,
+            surface.temperature()?,
+        ))
     }
 }
-
-
 
 pub trait WxEntryLayer {
     fn layer(&self) -> Layer;
@@ -140,16 +158,28 @@ pub trait WxEntryLayer {
 
     // OPTIONAL FIELDS ---------------------------------------------------------
 
-    fn temperature(&self) -> Option<Temperature> {None}
-    fn pressure(&self) -> Option<Pressure> {None}
-    fn visibility(&self) -> Option<Distance> {None}
-    fn wind(&self) -> Option<Wind> {None}
+    fn temperature(&self) -> Option<Temperature> {
+        None
+    }
+    fn pressure(&self) -> Option<Pressure> {
+        None
+    }
+    fn visibility(&self) -> Option<Distance> {
+        None
+    }
+    fn wind(&self) -> Option<Wind> {
+        None
+    }
 
     // QUASI-CALCULATED FIELDS -------------------------------------------------
     // completing one of these fields will complete the others
 
-    fn dewpoint(&self) -> Option<Temperature> {self.dewpoint_from_rh()}
-    fn relative_humidity(&self) -> Option<Fraction> {self.rh_from_dewpoint()}
+    fn dewpoint(&self) -> Option<Temperature> {
+        self.dewpoint_from_rh()
+    }
+    fn relative_humidity(&self) -> Option<Fraction> {
+        self.rh_from_dewpoint()
+    }
 
     // CALCULATED FIELDS -------------------------------------------------------
 
@@ -165,26 +195,26 @@ pub trait WxEntryLayer {
         let p = self.pressure()?.value_in(Mbar);
         let t = self.temperature()?.value_in(Celsius);
         let h = self.height_msl().value_in(Meter);
-        
+
         // http://www.wind101.net/sea-level-pressure-advanced/sea-level-pressure-advanced.html
-        let phi =  self.station().coords.latitude   * PI / 180.0;
+        let phi = self.station().coords.latitude * PI / 180.0;
         let b = 1013.25; //(average baro pressure of a column)
-        let k_upper =  18400.; // meters apparently
+        let k_upper = 18400.; // meters apparently
         let alpha = 0.0037; // coefficient of thermal expansion of air
         let k_lower = 0.0026; // based on figure of earth
         let r = 6367324.; // radius of earth
-        
+
         let lapse_rate = 0.005; // 0.5C/100m
 
-        let column_temp = t + (lapse_rate*h)/2.; // take the average of the temperature
-        let e = 10f32.powf(7.5*column_temp / (237.3+column_temp)) * 6.1078;
+        let column_temp = t + (lapse_rate * h) / 2.; // take the average of the temperature
+        let e = 10f32.powf(7.5 * column_temp / (237.3 + column_temp)) * 6.1078;
 
         let term1 = 1. + (alpha * column_temp); // correction for column temp
-        let term2 = 1. / (1. - (0.378 * (e/b))); // correction for humidity
-        let term3 = 1. / (1. - (k_lower * (2.*phi).cos())); // correction for obliquity of earth
-        let term4 = 1. + (h/r); // correction for gravity
+        let term2 = 1. / (1. - (0.378 * (e / b))); // correction for humidity
+        let term3 = 1. / (1. - (k_lower * (2. * phi).cos())); // correction for obliquity of earth
+        let term4 = 1. + (h / r); // correction for gravity
 
-        let correction = h / (k_upper*term1*term2*term3*term4);
+        let correction = h / (k_upper * term1 * term2 * term3 * term4);
 
         let mslp = 10f32.powf(p.log10() + correction);
 
@@ -210,7 +240,7 @@ pub trait WxEntryLayer {
 
         if self.wind_chill_valid() == Some(true) {
             let v_016 = mph.powf(0.16);
-            let wc_f = 35.74 + 0.6215*t - 35.75*v_016 + 0.4275*t*v_016;
+            let wc_f = 35.74 + 0.6215 * t - 35.75 * v_016 + 0.4275 * t * v_016;
             Some(Temperature::new(wc_f, Fahrenheit))
         } else {
             None
@@ -241,13 +271,32 @@ pub trait WxEntryLayer {
 
     // from Wikipedia: https://en.wikipedia.org/wiki/Heat_index
     fn heat_index(&self) -> Option<Temperature> {
-        let t = self.temperature()?.value_in(Fahrenheit);
-        let rh = self.relative_humidity()?.value_in(Percent);
+        let t = self.temperature()?.value_in(Fahrenheit) as f64;
+        let rh = self.relative_humidity()?.value_in(Percent) as f64;
 
         if self.heat_index_valid() == Some(true) {
-            const C: [f32; 10] = [0.0, -42.379, 2.04901523, 10.14333127, -0.22475541, -0.00683783, -0.05481717, 0.00122874, 0.00085282, -0.00000199];
-            let hi_f = (C[1]) + (C[2]*t) + (C[3]*rh) + (C[4]*t*rh) + (C[5]*t*t) + (C[6]*rh*rh) + (C[7]*t*t*rh) + (C[8]*t*rh*rh) + (C[9]*t*t*rh*rh);
-            Some(Temperature::new(hi_f, Fahrenheit))
+            const C: [f64; 10] = [
+                0.0,
+                -42.379,
+                2.04901523,
+                10.14333127,
+                -0.22475541,
+                -0.00683783,
+                -0.05481717,
+                0.00122874,
+                0.00085282,
+                -0.00000199,
+            ];
+            let hi_f = (C[1])
+                + (C[2] * t)
+                + (C[3] * rh)
+                + (C[4] * t * rh)
+                + (C[5] * t * t)
+                + (C[6] * rh * rh)
+                + (C[7] * t * t * rh)
+                + (C[8] * t * rh * rh)
+                + (C[9] * t * t * rh * rh);
+            Some(Temperature::new(hi_f as f32, Fahrenheit))
         } else {
             None
         }
@@ -263,51 +312,53 @@ pub trait WxEntryLayer {
             (Some(false), Some(false)) => self.temperature(), // if we're outside the range of both, then we can just use temp_2m
             (None, _) | (_, None) => None, // if neither are valid and we're missing data, then we can't provide a valid index
         }
-
     }
 
-    fn theta_e(&self, altimeter: Option<Pressure>) -> Option<Temperature> {   
-
+    fn theta_e(&self, altimeter: Option<Pressure>) -> Option<Temperature> {
         let pressure;
         if let Some(p) = self.pressure() {
             pressure = p;
-        } else if let Some(alt_pres) =  altimeter {
+        } else if let Some(alt_pres) = altimeter {
             pressure = altimeter_to_station(alt_pres, self.height_msl())
         } else {
-            return None
+            return None;
         }
 
-        return Some(theta_e(self.temperature()?, self.dewpoint()?, pressure));
+        Some(theta_e(self.temperature()?, self.dewpoint()?, pressure))
     }
-
 
     // QUASI-CALCULATED IMPLEMENTATIONS ----------------------------------------
 
     fn dewpoint_from_rh(&self) -> Option<Temperature> {
-        Some(dewpoint_from_rh(self.temperature()?, self.relative_humidity()?))
+        Some(dewpoint_from_rh(
+            self.temperature()?,
+            self.relative_humidity()?,
+        ))
     }
 
-    fn rh_from_dewpoint(&self) -> Option<Fraction> { // in percentage
+    fn rh_from_dewpoint(&self) -> Option<Fraction> {
+        // in percentage
         Some(rh_from_dewpoint(self.temperature()?, self.dewpoint()?))
     }
 
     fn wind_from_speed_and_direction(&self) -> Option<Wind> {
-        Some(Wind {direction: self.wind_direction()?, speed: self.wind_speed()?})
+        Some(Wind {
+            direction: self.wind_direction()?,
+            speed: self.wind_speed()?,
+        })
     }
 
     fn to_struct(&self) -> WxEntryLayerStruct {
-        let l = WxEntryLayerStruct {
+        WxEntryLayerStruct {
             dewpoint: self.dewpoint(),
             layer: self.layer(),
             station: self.station(),
             temperature: self.temperature(),
             pressure: self.pressure(),
             visibility: self.visibility(),
-            wind: self.wind()
-        };
-        
-        l
-    } 
+            wind: self.wind(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -319,15 +370,19 @@ mod tests {
     struct TestLayer {
         layer: Layer,
         station: &'static Station,
-        temperature: Option<Temperature>, 
+        temperature: Option<Temperature>,
         wind_speed: Option<Speed>,
         dewpoint: Option<Temperature>,
     }
 
     impl WxEntryLayer for TestLayer {
-        fn layer(&self) -> Layer {self.layer}
+        fn layer(&self) -> Layer {
+            self.layer
+        }
         #[allow(refining_impl_trait)]
-        fn station(&self) -> &'static Station {self.station}
+        fn station(&self) -> &'static Station {
+            self.station
+        }
     }
 
     fn default_station() -> &'static Station {
@@ -340,7 +395,6 @@ mod tests {
         Box::leak(b)
     }
 
-
     fn float_within_one_decimal(val: f32, cmp: f32) -> bool {
         if val < (cmp + 0.1) && val > (cmp - 0.1) {
             true
@@ -350,16 +404,14 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_apparent_temp() {
-
-        let mut e = TestLayer { 
-            layer: NearSurface, 
+        let mut e = TestLayer {
+            layer: NearSurface,
             station: default_station(),
             dewpoint: None,
             temperature: None,
-            wind_speed: None
+            wind_speed: None,
         };
 
         e.temperature = Some(Temperature::new(51., Fahrenheit));
@@ -380,52 +432,72 @@ mod tests {
         e.dewpoint = Some(Temperature::new(54., Fahrenheit));
         assert_eq!(e.apparent_temp(), Some(Temperature::new(81., Fahrenheit)));
 
-
         // heat index tests
 
         e.temperature = Some(Temperature::new(81., Fahrenheit));
         e.dewpoint = Some(Temperature::new(65., Fahrenheit));
         let apparent_temp = e.apparent_temp().unwrap();
-        assert!(float_within_one_decimal(apparent_temp.value_in(Fahrenheit), 82.8));
+        assert!(float_within_one_decimal(
+            apparent_temp.value_in(Fahrenheit),
+            82.8
+        ));
 
         e.temperature = Some(Temperature::new(100., Fahrenheit));
         e.dewpoint = Some(Temperature::new(75., Fahrenheit));
         let apparent_temp = e.apparent_temp().unwrap();
-        assert!(float_within_one_decimal(apparent_temp.value_in(Fahrenheit), 113.7));
+        assert!(float_within_one_decimal(
+            apparent_temp.value_in(Fahrenheit),
+            113.7
+        ));
 
         e.temperature = Some(Temperature::new(110., Fahrenheit));
         e.dewpoint = Some(Temperature::new(85., Fahrenheit));
         let apparent_temp = e.apparent_temp().unwrap();
-        assert!(float_within_one_decimal(apparent_temp.value_in(Fahrenheit), 146.1));
-
+        assert!(float_within_one_decimal(
+            apparent_temp.value_in(Fahrenheit),
+            146.1
+        ));
 
         // wind chill tests
 
         e.temperature = Some(Temperature::new(32., Fahrenheit));
         e.wind_speed = Some(Speed::new(10., Mph));
         let apparent_temp = e.apparent_temp().unwrap();
-        assert!(float_within_one_decimal(apparent_temp.value_in(Fahrenheit), 23.0));
+        assert!(float_within_one_decimal(
+            apparent_temp.value_in(Fahrenheit),
+            23.0
+        ));
 
         e.temperature = Some(Temperature::new(49., Fahrenheit));
         e.wind_speed = Some(Speed::new(3., Mph));
         let apparent_temp = e.apparent_temp().unwrap();
-        assert!(float_within_one_decimal(apparent_temp.value_in(Fahrenheit), 48.1));
+        assert!(float_within_one_decimal(
+            apparent_temp.value_in(Fahrenheit),
+            48.1
+        ));
 
         e.temperature = Some(Temperature::new(49., Fahrenheit));
         e.wind_speed = Some(Speed::new(40., Mph));
         let apparent_temp = e.apparent_temp().unwrap();
-        assert!(float_within_one_decimal(apparent_temp.value_in(Fahrenheit), 38.9));
+        assert!(float_within_one_decimal(
+            apparent_temp.value_in(Fahrenheit),
+            38.9
+        ));
 
         e.temperature = Some(Temperature::new(-20., Fahrenheit));
         e.wind_speed = Some(Speed::new(3., Mph));
         let apparent_temp = e.apparent_temp().unwrap();
-        assert!(float_within_one_decimal(apparent_temp.value_in(Fahrenheit), -30.7));
-
+        assert!(float_within_one_decimal(
+            apparent_temp.value_in(Fahrenheit),
+            -30.7
+        ));
 
         e.temperature = Some(Temperature::new(-20., Fahrenheit));
         e.wind_speed = Some(Speed::new(40., Mph));
         let apparent_temp = e.apparent_temp().unwrap();
-        assert!(float_within_one_decimal(apparent_temp.value_in(Fahrenheit), -58.4));
-
+        assert!(float_within_one_decimal(
+            apparent_temp.value_in(Fahrenheit),
+            -58.4
+        ));
     }
 }

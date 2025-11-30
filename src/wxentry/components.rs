@@ -1,9 +1,9 @@
+use crate::*;
+use anyhow::bail;
 use chrono_tz::Tz;
+use derive_more::Display;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use derive_more::Display;
-use anyhow::bail;
-use crate::*;
 use std::fmt::{self, Display, Formatter};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -16,11 +16,11 @@ pub struct Station {
 
 impl Default for Station {
     fn default() -> Self {
-        Station { 
+        Station {
             name: "NULL Island".into(),
-            altitude: Altitude::new(0.0, Meter), 
-            coords: (0.0,0.0).into(), 
-            time_zone: Tz::UTC 
+            altitude: Altitude::new(0.0, Meter),
+            coords: (0.0, 0.0).into(),
+            time_zone: Tz::UTC,
         }
     }
 }
@@ -35,11 +35,11 @@ impl Default for Station {
 
 // impl From<StaticStation> for Station {
 //     fn from(value: StaticStation) -> Station {
-//         Station { 
-//             name: value.name.into(), 
-//             altitude: value.altitude, 
-//             coords: value.coords.into(), 
-//             time_zone: value.time_zone, 
+//         Station {
+//             name: value.name.into(),
+//             altitude: value.altitude,
+//             coords: value.coords.into(),
+//             time_zone: value.time_zone,
 //         }
 //     }
 // }
@@ -67,7 +67,10 @@ pub struct Coordinates {
 
 impl From<(f32, f32)> for Coordinates {
     fn from(value: (f32, f32)) -> Self {
-        Coordinates { latitude: value.0, longitude: value.1 }
+        Coordinates {
+            latitude: value.0,
+            longitude: value.1,
+        }
     }
 }
 
@@ -98,8 +101,8 @@ pub enum Layer {
     Indoor,
     NearSurface,
     SeaLevel,
-    AGL(u64), // in m
-    MSL(u64), // in m
+    AGL(u64),       // in m
+    MSL(u64),       // in m
     MBAR(u64, u64), // in mb. must also store geopotential height in m
 }
 // we put the values in u64 because I really wanna be able to use hash on it
@@ -123,20 +126,17 @@ impl Display for Layer {
 
 impl Layer {
     pub fn height_agl(&self, station_altitude: Altitude) -> Altitude {
-        let height = match self {
+        match self {
             All => Altitude::new(f32::NAN, Meter),
             Indoor => Altitude::new(1., Meter),
             NearSurface => Altitude::new(2., Meter),
-            SeaLevel => station_altitude*-1.,
+            SeaLevel => station_altitude * -1.,
             AGL(a) => Altitude::new(*a as f32, Meter),
             MSL(a) => Altitude::new(*a as f32, Meter) - station_altitude,
-            MBAR(_p, a) => Altitude::new(*a as f32, Meter)
-        };
-
-        height
+            MBAR(_p, a) => Altitude::new(*a as f32, Meter),
+        }
     }
 }
-
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Wind {
@@ -149,7 +149,6 @@ impl Display for Wind {
         write!(f, "{}°@{} kts", self.direction.degrees(), self.speed)
     }
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Display, PartialEq)]
 pub enum CloudLayerCoverage {
@@ -164,7 +163,7 @@ pub enum CloudLayerCoverage {
     Broken,
     #[display(fmt = "OVC")]
     // #[serde(rename = "OVC")]
-    Overcast
+    Overcast,
 }
 
 impl CloudLayerCoverage {
@@ -174,10 +173,9 @@ impl CloudLayerCoverage {
             Self::Scattered => "SCT",
             Self::Broken => "BKN",
             Self::Overcast => "OVC",
-        } 
+        }
     }
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct CloudLayer {
@@ -185,7 +183,7 @@ pub struct CloudLayer {
     pub height: u32, // given in feet
 }
 
-impl CloudLayer {   
+impl CloudLayer {
     pub fn from_code(code: &str, height: u32) -> Result<Option<CloudLayer>> {
         let coverage_opt = match code {
             "SKC" => None,
@@ -198,7 +196,7 @@ impl CloudLayer {
         };
 
         match coverage_opt {
-            Some(coverage) => Ok(Some(CloudLayer {coverage, height})),
+            Some(coverage) => Ok(Some(CloudLayer { coverage, height })),
             None => Ok(None),
         }
     }
@@ -206,7 +204,7 @@ impl CloudLayer {
 
 impl fmt::Display for CloudLayer {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}@{} ft", self.coverage.to_string(), self.height)
+        write!(f, "{}@{} ft", self.coverage, self.height)
     }
 }
 
@@ -222,7 +220,14 @@ impl fmt::Display for SkyCoverage {
         match self {
             Self::Clear => write!(f, "CLR"),
             Self::Cloudy(v) => {
-                write!(f, "{}", v.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", "))
+                write!(
+                    f,
+                    "{}",
+                    v.iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             }
         }
     }
@@ -237,13 +242,16 @@ pub struct Precip {
 
 impl Display for Precip {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Rain: {}, Snow: {}, Unknown: {}", self.rain, self.snow, self.unknown)
+        write!(
+            f,
+            "Rain: {}, Snow: {}, Unknown: {}",
+            self.rain, self.snow, self.unknown
+        )
     }
 }
 
-
 #[derive(Debug, Clone, Copy, Serialize)]
-pub struct Wx { 
+pub struct Wx {
     pub blowing: bool,
     pub freezing: bool,
     pub showers: bool,
@@ -251,15 +259,15 @@ pub struct Wx {
     pub thunderstorm: bool,
     pub fog: bool,
     pub smoke: bool,
-    
+
     pub visibility_inhibitor: bool,
-    
+
     // #[serde(skip_serializing_if = "Intensity::is_none")]
     pub rain: Intensity,
     // #[serde(skip_serializing_if = "Intensity::is_none")]
     pub snow: Intensity,
     // #[serde(skip_serializing_if = "Intensity::is_none")]
-    pub falling_ice: Intensity,    
+    pub falling_ice: Intensity,
     // #[serde(skip_serializing_if = "Intensity::is_none")]
     pub dust: Intensity,
     // #[serde(skip_serializing_if = "Intensity::is_none")]
@@ -274,11 +282,21 @@ impl Wx {
     pub fn none() -> Wx {
         use Intensity::None;
         Wx {
-            blowing: false, freezing: false, showers: false, squalls: false, 
-            thunderstorm: false, visibility_inhibitor: false, fog: false,
+            blowing: false,
+            freezing: false,
+            showers: false,
+            squalls: false,
+            thunderstorm: false,
+            visibility_inhibitor: false,
+            fog: false,
             smoke: false,
-            unknown: None, rain: None, snow: None, falling_ice: None, 
-            dust: None, sand: None, funnel_cloud: None,
+            unknown: None,
+            rain: None,
+            snow: None,
+            falling_ice: None,
+            dust: None,
+            sand: None,
+            funnel_cloud: None,
         }
     }
 
@@ -304,7 +322,7 @@ impl Wx {
 
     pub fn parse_code(code: &str) -> Wx {
         let re = Regex::new(r"(-|\+|BC|BL|BR|DR|DS|DU|DZ|FC|FG|FU|FZ|GR|GS|HZ|IC|MI|NSW|PL|PO|PR|PY|RA|SA|SG|SH|SN|SQ|SS|TS|UP|VA|VC|/+)").unwrap();
-        
+
         let matches: Vec<&str> = re.find_iter(code).map(|x| x.as_str()).collect();
 
         let mut wx = Wx::none();
@@ -322,7 +340,10 @@ impl Wx {
 
         wx.freezing = matches.contains(&"FZ");
         wx.showers = matches.contains(&"SH");
-        wx.blowing = matches.contains(&"BL") || matches.contains(&"SS") || matches.contains(&"PO") || matches.contains(&"DS");
+        wx.blowing = matches.contains(&"BL")
+            || matches.contains(&"SS")
+            || matches.contains(&"PO")
+            || matches.contains(&"DS");
         wx.squalls = matches.contains(&"SQ");
         wx.thunderstorm = matches.contains(&"TS");
         wx.fog = matches.contains(&"BR") || matches.contains(&"FG");
@@ -356,8 +377,11 @@ impl Wx {
             wx.unknown = general_intensity
         }
 
-        if matches.contains(&"SN") || matches.contains(&"GS") || 
-           matches.contains(&"IC") || matches.contains(&"SG") {
+        if matches.contains(&"SN")
+            || matches.contains(&"GS")
+            || matches.contains(&"IC")
+            || matches.contains(&"SG")
+        {
             wx.snow = general_intensity;
         }
 
@@ -382,7 +406,7 @@ pub enum Intensity {
 
 impl Intensity {
     pub fn is_none(&self) -> bool {
-        return self == &Self::None
+        self == &Self::None
     }
     pub fn most_intense(self, other: Intensity) -> Intensity {
         if self > other {
