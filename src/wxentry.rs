@@ -46,6 +46,9 @@ where
     fn precip_today(&self) -> Option<Precip> {
         None
     }
+    fn precip_probability(&self) -> Option<Fraction> {
+        None
+    }
     fn precip(&self) -> Option<Precip> {
         None
     }
@@ -114,6 +117,7 @@ where
                 dewpoint: layer.dewpoint(),
                 visibility: layer.visibility(),
                 wind: layer.wind(),
+                height_msl: layer.height_msl(),
             };
 
             layers.insert(layer.layer(), l);
@@ -129,6 +133,7 @@ where
             wx_codes: self.wx_codes(),
             raw_metar: self.raw_metar(),
             precip_today: self.precip_today(),
+            precip_probability: self.precip_probability(),
             precip: self.precip(),
         })
     }
@@ -183,18 +188,18 @@ pub trait WxEntryLayer {
 
     // CALCULATED FIELDS -------------------------------------------------------
 
-    fn height_agl(&self) -> Altitude {
+    fn height_agl(&self) -> Option<Altitude> {
         self.layer().height_agl(self.station().altitude)
     }
 
-    fn height_msl(&self) -> Altitude {
-        self.height_agl() + self.station().altitude
+    fn height_msl(&self) -> Option<Altitude> {
+        self.height_agl().map(|x| x - self.station().altitude)
     }
 
     fn slp(&self) -> Option<Pressure> {
         let p = self.pressure()?.value_in(Mbar);
         let t = self.temperature()?.value_in(Celsius);
-        let h = self.height_msl().value_in(Meter);
+        let h = self.height_msl().map(|x| x.value_in(Meter))?;
 
         // http://www.wind101.net/sea-level-pressure-advanced/sea-level-pressure-advanced.html
         let phi = self.station().coords.latitude * PI / 180.0;
@@ -252,7 +257,7 @@ pub trait WxEntryLayer {
     }
 
     fn wind_direction(&self) -> Option<Direction> {
-        Some(self.wind()?.direction)
+        self.wind()?.direction
     }
 
     // None - Incomplete Data
@@ -319,7 +324,7 @@ pub trait WxEntryLayer {
         if let Some(p) = self.pressure() {
             pressure = p;
         } else if let Some(alt_pres) = altimeter {
-            pressure = altimeter_to_station(alt_pres, self.height_msl())
+            pressure = altimeter_to_station(alt_pres, self.height_msl()?)
         } else {
             return None;
         }
@@ -343,7 +348,7 @@ pub trait WxEntryLayer {
 
     fn wind_from_speed_and_direction(&self) -> Option<Wind> {
         Some(Wind {
-            direction: self.wind_direction()?,
+            direction: self.wind_direction(),
             speed: self.wind_speed()?,
         })
     }
@@ -357,6 +362,7 @@ pub trait WxEntryLayer {
             pressure: self.pressure(),
             visibility: self.visibility(),
             wind: self.wind(),
+            height_msl: self.height_msl(),
         }
     }
 }

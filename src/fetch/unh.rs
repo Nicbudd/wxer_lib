@@ -139,7 +139,7 @@ impl WxEntryLayer for &UNHDataWithStation {
     }
     fn wind(&self) -> Option<Wind> {
         Some(Wind {
-            direction: Direction::from_degrees(self.data.wind_dir as u16).ok()?,
+            direction: Direction::from_degrees(self.data.wind_dir as u16).ok(),
             speed: Speed::new(self.data.wind_speed, Mph),
         })
     }

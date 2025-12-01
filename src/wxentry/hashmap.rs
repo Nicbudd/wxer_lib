@@ -136,7 +136,7 @@ impl<'a> WxEntryLayer for LayerHash<'a> {
     }
     fn wind_direction(&self) -> Option<Direction> {
         self.get(Param::WindDirection)
-            .or(Some(self.get::<Wind>(Param::Wind)?.direction))
+            .or(self.get::<Wind>(Param::Wind)?.direction)
     }
     fn wind(&self) -> Option<Wind> {
         self.get(Param::Wind).or(Some(Wind {

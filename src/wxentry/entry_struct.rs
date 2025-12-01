@@ -5,28 +5,6 @@ use serde::Serialize;
 
 use crate::*;
 
-// // starting to think this is a bad idea...
-// #[derive(Debug, Clone, Serialize)]
-// enum StationPotentialReference {
-//     Owned(Station),
-//     Reference(&'static Station)
-// }
-
-// impl StationPotentialReference {
-//     fn get_ref(&self) -> &'static Station {
-//         match self {
-//             Self::Reference(r) => r,
-//             Self::Owned(s) => Box::leak(Box::new(s.clone()))
-//         }
-//     }
-//     fn get_owned(self) -> Station {
-//         match self {
-//             Self::Owned(s) => s,
-//             Self::Reference(r) => r.clone()
-//         }
-//     }
-// }
-
 #[derive(Debug, Clone, Serialize)]
 pub struct WxEntryStruct {
     pub date_time: DateTime<Utc>,
@@ -38,6 +16,7 @@ pub struct WxEntryStruct {
     pub wx_codes: Option<Vec<String>>,
     pub raw_metar: Option<String>,
     pub precip_today: Option<Precip>,
+    pub precip_probability: Option<Fraction>,
     pub precip: Option<Precip>,
     pub altimeter: Option<Pressure>,
     pub cape: Option<SpecEnergy>,
@@ -47,18 +26,15 @@ impl<'a> WxEntry<'a, &'a WxEntryLayerStruct> for WxEntryStruct {
     fn date_time(&self) -> DateTime<Utc> {
         self.date_time
     }
-    #[allow(refining_impl_trait)]
     fn station(&self) -> &'static Station {
         self.station
     }
-    #[allow(refining_impl_trait)]
     fn layer(&'a self, layer: Layer) -> Option<&'a WxEntryLayerStruct> {
         self.layers.get(&layer)
     }
     fn layers(&self) -> Vec<Layer> {
         self.layers.keys().map(|x| x.to_owned()).collect()
     }
-
     fn skycover(&self) -> Option<SkyCoverage> {
         self.skycover.clone()
     }
@@ -70,6 +46,9 @@ impl<'a> WxEntry<'a, &'a WxEntryLayerStruct> for WxEntryStruct {
     }
     fn precip_today(&self) -> Option<Precip> {
         self.precip_today
+    }
+    fn precip_probability(&self) -> Option<Fraction> {
+        self.precip_probability
     }
     fn precip(&self) -> Option<Precip> {
         self.precip
@@ -92,6 +71,22 @@ pub struct WxEntryLayerStruct {
     pub visibility: Option<Distance>,
     pub wind: Option<Wind>,
     pub dewpoint: Option<Temperature>,
+    pub height_msl: Option<Altitude>,
+}
+
+impl WxEntryLayerStruct {
+    pub fn new(layer: Layer, station: &'static Station) -> Self {
+        Self {
+            layer,
+            station,
+            temperature: None,
+            pressure: None,
+            visibility: None,
+            wind: None,
+            dewpoint: None,
+            height_msl: None,
+        }
+    }
 }
 
 impl WxEntryLayer for &WxEntryLayerStruct {
@@ -116,5 +111,9 @@ impl WxEntryLayer for &WxEntryLayerStruct {
     }
     fn wind(&self) -> Option<Wind> {
         self.wind
+    }
+    fn height_msl(&self) -> Option<Altitude> {
+        self.height_msl
+            .or(self.height_agl().map(|x| x - self.station().altitude))
     }
 }

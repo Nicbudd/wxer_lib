@@ -101,9 +101,9 @@ pub enum Layer {
     Indoor,
     NearSurface,
     SeaLevel,
-    AGL(u64),       // in m
-    MSL(u64),       // in m
-    MBAR(u64, u64), // in mb. must also store geopotential height in m
+    AGL(u64),  // in m
+    MSL(u64),  // in m
+    MBAR(u64), // in mb.
 }
 // we put the values in u64 because I really wanna be able to use hash on it
 // and the precision isn't that important
@@ -119,34 +119,38 @@ impl Display for Layer {
             SeaLevel => write!(f, "Sea Level"),
             AGL(h) => write!(f, "{h} ft AGL"),
             MSL(h) => write!(f, "{h} ft MSL"),
-            MBAR(p, _h) => write!(f, "{p} mb"),
+            MBAR(p) => write!(f, "{p} mb"),
         }
     }
 }
 
 impl Layer {
-    pub fn height_agl(&self, station_altitude: Altitude) -> Altitude {
+    pub fn height_agl(&self, station_altitude: Altitude) -> Option<Altitude> {
         match self {
-            All => Altitude::new(f32::NAN, Meter),
-            Indoor => Altitude::new(1., Meter),
-            NearSurface => Altitude::new(2., Meter),
-            SeaLevel => station_altitude * -1.,
-            AGL(a) => Altitude::new(*a as f32, Meter),
-            MSL(a) => Altitude::new(*a as f32, Meter) - station_altitude,
-            MBAR(_p, a) => Altitude::new(*a as f32, Meter),
+            All => Some(Altitude::new(f32::NAN, Meter)),
+            Indoor => Some(Altitude::new(1., Meter)),
+            NearSurface => Some(Altitude::new(2., Meter)),
+            SeaLevel => Some(station_altitude * -1.),
+            AGL(a) => Some(Altitude::new(*a as f32, Meter)),
+            MSL(a) => Some(Altitude::new(*a as f32, Meter) - station_altitude),
+            MBAR(_) => None,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Wind {
-    pub direction: Direction,
+    pub direction: Option<Direction>,
     pub speed: Speed,
 }
 
 impl Display for Wind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}°@{} kts", self.direction.degrees(), self.speed)
+        if let Some(dir) = self.direction {
+            write!(f, "{}°@{}", dir.degrees(), self.speed)
+        } else {
+            write!(f, "{}", self.speed)
+        }
     }
 }
 

@@ -223,14 +223,14 @@ impl WxEntryLayer for &WxAllLayer {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindExpanded {
-    pub direction: DirectionExpanded,
+    pub direction: Option<DirectionExpanded>,
     pub speed: Speed,
 }
 
 impl From<Wind> for WindExpanded {
     fn from(value: Wind) -> Self {
         WindExpanded {
-            direction: value.direction.into(),
+            direction: value.direction.map(DirectionExpanded::from),
             speed: value.speed,
         }
     }
@@ -239,7 +239,7 @@ impl From<Wind> for WindExpanded {
 impl From<WindExpanded> for Wind {
     fn from(value: WindExpanded) -> Self {
         Wind {
-            direction: value.direction.into(),
+            direction: value.direction.map(Direction::from),
             speed: value.speed,
         }
     }

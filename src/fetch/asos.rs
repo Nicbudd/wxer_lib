@@ -39,7 +39,7 @@ pub async fn import(
 
     fn make_wind(speed: Option<f32>, dir: Option<f32>) -> Option<Wind> {
         let speed = Speed::new(speed?, Knots);
-        let direction = Direction::from_degrees(dir? as u16).ok()?;
+        let direction = Direction::from_degrees(dir? as u16).ok();
         Some(Wind { direction, speed })
     }
 
@@ -59,6 +59,7 @@ pub async fn import(
         visibility,
         wind,
         dewpoint,
+        height_msl: NearSurface.height_agl(Altitude::new(0.0, Meter)),
     };
 
     let sea_level = WxEntryLayerStruct {
@@ -69,6 +70,7 @@ pub async fn import(
         visibility: None,
         wind: None,
         dewpoint: None,
+        height_msl: None,
     };
 
     let mut layers = HashMap::new();
@@ -86,6 +88,7 @@ pub async fn import(
         skycover,
         cape: None,
         precip: None,
+        precip_probability: None,
         precip_today,
         wx_codes: ob.present_wx,
         raw_metar: ob.raw,
