@@ -237,6 +237,24 @@ impl fmt::Display for SkyCoverage {
     }
 }
 
+impl SkyCoverage {
+    pub fn oktas(&self) -> u8 {
+        match self {
+            Self::Clear => 0,
+            Self::Cloudy(v) => v
+                .iter()
+                .map(|x| match x.coverage {
+                    CloudLayerCoverage::Few => 1,
+                    CloudLayerCoverage::Scattered => 3,
+                    CloudLayerCoverage::Broken => 6,
+                    CloudLayerCoverage::Overcast => 8,
+                })
+                .max()
+                .unwrap(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Precip {
     pub unknown: PrecipAmount,
@@ -279,7 +297,7 @@ pub struct Wx {
     // #[serde(skip_serializing_if = "Intensity::is_none")]
     pub funnel_cloud: Intensity, // light: FC, heavy: Tornado
     // #[serde(skip_serializing_if = "Intensity::is_none")]
-    pub unknown: Intensity, // light: FC, heavy: Tornado
+    pub unknown: Intensity,
 }
 
 impl Wx {

@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use std::{collections::HashMap, f32::consts::PI, fmt};
 
+use crate::comfort::comfort_index;
 use crate::formulae::*;
 use crate::units::*;
 
@@ -85,6 +86,10 @@ where
 
     fn date_time_local(&self) -> DateTime<Tz> {
         self.date_time().with_timezone(&self.station().time_zone)
+    }
+
+    fn comfort_index(&'a self) -> Option<(u8, crate::comfort::Factor)> {
+        comfort_index(self.to_struct().ok()?)
     }
 
     // ACCESSOR FIELDS ---------------------------------------------------------

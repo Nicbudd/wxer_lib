@@ -15,6 +15,7 @@ pub use units::*;
 pub mod wxentry;
 pub use wxentry::*;
 
+pub mod comfort;
 
 // HELPER FUNCTIONS ------------------------------------------------------------
 
@@ -22,8 +23,8 @@ pub fn ignore_none<T, R, F: FnMut(T) -> R>(a: Option<T>, mut f: F) -> Option<R> 
     match a {
         None => None,
         Some(s) => {
-            let r = f(s); 
+            let r = f(s);
             Some(r)
         }
     }
-} 
+}
